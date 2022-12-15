@@ -2,6 +2,9 @@
 /build/cmake/*
 !/build/cmake/CMakeLists.txt
 
+[Dd]ebug_x64/
+[Rr]elease_x64/
+
 /build/packed/
 
 
