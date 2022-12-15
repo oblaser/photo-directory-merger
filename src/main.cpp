@@ -24,7 +24,7 @@ using std::setw;
 
 namespace
 {
-    const std::string usageString = std::string(prj::exeName) + " [options] INDIR [INDIR ...] OUTDIR";
+    const std::string usageString = std::string(prj::exeName) + " [options] INDIR [INDIR [INDIR [...]]] OUTDIR";
 
     void printHelp()
     {
@@ -93,15 +93,15 @@ int main(int argc, char** argv)
         args.add("../../../test/system/Emily");
         args.add("../../../test/system/Joe");
         args.add("../../../test/system/Mary");
-        args.add("../../../test/system/SomeOneElse");
+        //args.add("../../../test/system/SomeOneElse");
 
         // OUTDIR
         args.add("../../../test/system/out-merged");
 
         // options
         //args.add("-vf");
-        args.add("-h");
-        args.add("--version");
+        //args.add("-h");
+        //args.add("--version");
     }
 #endif
 
