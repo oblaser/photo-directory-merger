@@ -1,7 +1,7 @@
 /*
 author          Oliver Blaser
-date            20.11.2022
-copyright       GNU GPLv3 - Copyright (c) 2022 Oliver Blaser
+date            04.01.2023
+copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 */
 
 #include <iomanip>
@@ -68,7 +68,7 @@ namespace
         cout << endl;
         cout << "project page: " << prj::website << endl;
         cout << endl;
-        cout << "Copyright (c) 2022 Oliver Blaser." << endl;
+        cout << "Copyright (c) 2023 Oliver Blaser." << endl;
         cout << "License: GNU GPLv3 <http://gnu.org/licenses/>." << endl;
         cout << "This is free software. There is NO WARRANTY." << endl;
     }
@@ -94,9 +94,11 @@ int main(int argc, char** argv)
         args.add("../../../test/system/Joe");
         args.add("../../../test/system/Mary");
         //args.add("../../../test/system/SomeOneElse");
+        args.add("../../../test/system/empty");
 
         // OUTDIR
         args.add("../../../test/system/out-merged");
+        //args.add("../../../test/system/Emily");
 
         // options
         //args.add("-vf");

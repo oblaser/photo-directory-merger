@@ -1,11 +1,12 @@
 /*
 author          Oliver Blaser
-date            12.12.2022
-copyright       GNU GPLv3 - Copyright (c) 2022 Oliver Blaser
+date            04.01.2023
+copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 */
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <iomanip>
@@ -14,11 +15,33 @@ copyright       GNU GPLv3 - Copyright (c) 2022 Oliver Blaser
 #include <string>
 #include <vector>
 
+#include "middleware/util.h"
 #include "processor.h"
 #include "project.h"
 
 #include <omw/cli.h>
 #include <omw/string.h>
+
+
+#define ERROR_PRINT(msg)            \
+{                                   \
+    rcnt.incErrors();               \
+    if (!quiet) printError(msg);    \
+}
+
+#define WARNING_PRINT(msg)          \
+{                                   \
+    rcnt.incWarnings();             \
+    if (!quiet) printWarning(msg);  \
+}
+
+#define ERROR_PRINT_EC_THROWLINE(msg, EC_x) \
+{                                   \
+    rcnt.incErrors();               \
+    if (!quiet) printError(msg);    \
+    r = EC_x;                       \
+    throw (int)(__LINE__);          \
+}
 
 
 using std::cout;
@@ -35,10 +58,9 @@ namespace
 
         EC__begin_ = 79,
 
-        // manual v1.0.0
-        EC_INDIR_NEXIST = EC__begin_,
-        EC_INDIR_UNSUPPORTED_UNICODE,
-        EC_OUTDIR_NOTEMPTY,
+        EC_OUTDIR_NOTEMPTY = EC__begin_,
+        EC_INOUTDIR_EQ,
+        EC_OUTDIR_NOTCREATED,
 
         EC_USER_ABORT, // not actually returned
 
@@ -113,6 +135,12 @@ namespace
         else cout << text;
     }
 
+    void printFormattedLine(const std::string& text)
+    {
+        printFormattedText(text);
+        cout << endl;
+    }
+
     constexpr int ewiWidth = 10;
     void printError(const std::string& text)
     {
@@ -137,6 +165,20 @@ namespace
     {
         //cout << omw::fgBrightWhite << title << omw::normal << endl;
         cout << title << endl;
+    }
+
+
+
+    bool equivalent(const std::vector<fs::path>& inDirs, const fs::path& outDir)
+    {
+        bool r = false;
+
+        for (size_t i = 0; (i < inDirs.size()) && !r; ++i)
+        {
+            if (fs::exists(inDirs[i])) r = fs::equivalent(inDirs[i], outDir);
+        }
+
+        return r;
     }
 
 
@@ -242,49 +284,62 @@ namespace
     {
         scheme_t r = SCHEME::unknown;
 
-        std::vector<omw::string> stemFilenames;
-
-        for (const fs::directory_entry& entry : fs::directory_iterator(inDir))
+        if (fs::exists(inDir))
         {
-            if (entry.is_regular_file()) stemFilenames.push_back(entry.path().stem().u8string());
-        }
+            std::vector<omw::string> stemFilenames;
 
-        size_t blockSize = stemFilenames.size() / 10;
-        if (blockSize == 0) blockSize = 1;
+            for (const fs::directory_entry& entry : fs::directory_iterator(inDir))
+            {
+                if (entry.is_regular_file()) stemFilenames.push_back(entry.path().stem().u8string());
+            }
 
-        std::vector<omw::string> analyze;
-        for (size_t i = 0; i < stemFilenames.size(); ++i)
-        {
-            if ((i % blockSize) == 0) analyze.push_back(stemFilenames[i]);
-        }
+            constexpr size_t k = 30;
+            size_t blockSize = stemFilenames.size() / k;
+            if ((blockSize == 0) || (stemFilenames.size() <= k)) blockSize = 1;
 
-        stemFilenames.clear();
-        stemFilenames.shrink_to_fit();
+#if defined(PRJ_DEBUG) && 0
+            cout << omw::fgBrightBlack << "@" << __FUNCTION__ << " blockSize: " << blockSize << ", stemFilenames.size(): " << stemFilenames.size() << omw::fgDefault << endl;
+#endif
 
-        size_t cnt_huawai = 0;
-        size_t cnt_samsung = 0;
-        size_t cnt_winphone = 0;
+            std::vector<omw::string> analyze;
+            for (size_t i = 0; i < stemFilenames.size(); ++i)
+            {
+                if ((i % blockSize) == 0) analyze.push_back(stemFilenames[i]);
+            }
 
-        for(size_t i = 0; i < analyze.size(); ++i)
-        {
-            const auto tokens = analyze[i].split('_', 7); // maxNTokens + 1
-            if (schemeIsHuawai(tokens)) ++cnt_huawai;
-            if (schemeIsSamsung(tokens)) ++cnt_samsung;
-            if (schemeIsWinPhone(tokens)) ++cnt_winphone;
-        }
+            stemFilenames.clear();
+            stemFilenames.shrink_to_fit();
 
-        std::array<size_t, 3> cnt = { cnt_huawai, cnt_samsung, cnt_winphone };
-        std::sort(cnt.begin(), cnt.end(), std::greater<size_t>());
+            size_t cnt_huawai = 0;
+            size_t cnt_samsung = 0;
+            size_t cnt_winphone = 0;
 
-        const double rate = (double)(cnt[0]) / (double)(analyze.size());
-        if (pRate) *pRate = rate;
+            for (size_t i = 0; i < analyze.size(); ++i)
+            {
+                const auto tokens = analyze[i].split('_', 7); // maxNTokens + 1
+                if (schemeIsHuawai(tokens)) ++cnt_huawai;
+                if (schemeIsSamsung(tokens)) ++cnt_samsung;
+                if (schemeIsWinPhone(tokens)) ++cnt_winphone;
+            }
 
-        if ((cnt[0] != cnt[1]) && (rate >= 0.75))
-        {
-            if (cnt[0] == cnt_huawai) r = SCHEME::huawai;
-            else if (cnt[0] == cnt_samsung) r = SCHEME::samsung;
-            else if (cnt[0] == cnt_winphone) r = SCHEME::winphone;
-            //else if (cnt[0] == cnt_) r = SCHEME::;
+            std::array<size_t, 3> cnt = { cnt_huawai, cnt_samsung, cnt_winphone };
+            std::sort(cnt.begin(), cnt.end(), std::greater<size_t>());
+
+            const double rate = (double)(cnt[0]) / (double)(analyze.size());
+            if (pRate) *pRate = rate;
+
+            if ((cnt[0] != cnt[1]) && (rate >= 0.75))
+            {
+                if (cnt[0] == cnt_huawai) r = SCHEME::huawai;
+                else if (cnt[0] == cnt_samsung) r = SCHEME::samsung;
+                else if (cnt[0] == cnt_winphone) r = SCHEME::winphone;
+                //else if (cnt[0] == cnt_) r = SCHEME::;
+                else
+                {
+                    r = SCHEME::unknown;
+                    // maybe print something
+                }
+            }
             else
             {
                 r = SCHEME::unknown;
@@ -296,6 +351,8 @@ namespace
             r = SCHEME::unknown;
             // maybe print something
         }
+
+        if (pRate && (r == SCHEME::unknown)) *pRate = 1;
 
         return r;
     }
@@ -371,10 +428,62 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
     const bool& verbose = ___verbose;
     if (quiet) ___verbose = false;
 
-
-
     try
     {
+        util::ResultCounter rcnt = 0;
+        size_t nSucceeded = 0;
+
+        std::vector<fs::path> ___inDirPaths(inDirs.size());
+        const std::vector<fs::path>& inDirPaths = ___inDirPaths;
+        const fs::path outDirPath = outDir;
+        for (size_t i = 0; i < inDirs.size(); ++i) ___inDirPaths.at(i) = inDirs[i];
+
+
+
+        ///////////////////////////////////////////////////////////
+        // check/create out dir
+        ///////////////////////////////////////////////////////////
+
+        if (fs::exists(outDir))
+        {
+            if (::equivalent(inDirPaths, outDirPath)) ERROR_PRINT_EC_THROWLINE("an INDIR and the OUTDIR are equivalent", EC_INOUTDIR_EQ);
+
+            if (!fs::is_empty(outDir))
+            {
+                if (flags.force)
+                {
+                    if (verbose)
+                    {
+                        rcnt.incWarnings();
+                        printWarning("using non empty OUTDIR");
+                    }
+                }
+                else
+                {
+                    const std::string msg = "###OUTDIR \"" + outDir + "\" is not empty";
+
+                    if (verbose)
+                    {
+                        printInfo(msg);
+
+                        if (2 == cliChoice("use non empty OUTDIR?"))
+                        {
+                            r = EC_USER_ABORT;
+                            throw (int)(__LINE__);
+                        }
+                    }
+                    else ERROR_PRINT_EC_THROWLINE(msg, EC_OUTDIR_NOTEMPTY);
+                }
+            }
+        }
+        else
+        {
+            fs::create_directories(outDirPath);
+
+            if (!fs::exists(outDir)) ERROR_PRINT_EC_THROWLINE("could not create OUTDIR", EC_OUTDIR_NOTCREATED);
+        }
+
+
         ///////////////////////////////////////////////////////////
         // process
         ///////////////////////////////////////////////////////////
@@ -383,18 +492,69 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
 #error "not implemented"
 #endif
 
-        double rate;
+        double rate = 0;
+        scheme_t scheme;
 
-        for (size_t i = 0; i < inDirs.size(); ++i)
+        for (size_t i_inDir = 0; i_inDir < inDirs.size(); ++i_inDir)
         {
-            cout << "\"" << inDirs[i] << "\" " << toString(detectScheme(inDirs[i], &rate)) << " (" << rate*100 << "%)" << endl;
+            const util::ResultCounter::counter_type nErrorsOld = rcnt.errors();
+            const auto& inDir = inDirs[i_inDir];
+
+            scheme = detectScheme(inDir, &rate);
+            printFormattedLine("###\"" + inDir + "\" " + toString(scheme) + (scheme == SCHEME::unknown ? "" : " (" + std::to_string((int)round(rate * 100)) + "%)"));
+
+            if (fs::exists(inDir))
+            {
+                if (!fs::is_empty(inDir))
+                {
+                    if(!quiet) printInfo("processing not yet implemented");
+                }
+                else WARNING_PRINT("INDIR is empty");
+            }
+            else ERROR_PRINT("INDIR does not exist");
+
+            if (rcnt.errors() == nErrorsOld) ++nSucceeded;
         }
 
         ///////////////////////////////////////////////////////////
         // end
         ///////////////////////////////////////////////////////////
 
-        if (verbose) cout << "\n" << omw::fgBrightGreen << "done" << omw::defaultForeColor << endl;
+        if (!quiet)
+        {
+            cout << "========";
+
+            cout << "  " << omw::fgBrightWhite;
+            cout << nSucceeded << "/" << inDirs.size();
+            cout << omw::normal << " succeeded";
+
+            cout << ", ";
+            if (rcnt.errors() != 0) cout << omw::fgBrightRed;
+            cout << rcnt.errors();
+            if (rcnt.errors() != 0) cout << omw::normal;
+            cout << " error";
+            if (rcnt.errors() != 1) cout << "s";
+
+            cout << ", ";
+            if (rcnt.warnings() != 0) cout << omw::fgBrightYellow;
+            cout << rcnt.warnings();
+            if (rcnt.warnings() != 0) cout << omw::normal;
+            cout << " warning";
+            if (rcnt.warnings() != 1) cout << "s";
+
+            cout << " ========" << endl;
+        }
+
+        //if (verbose) cout << "\n" << omw::fgBrightGreen << "done" << omw::defaultForeColor << endl;
+
+        if (((nSucceeded == inDirs.size()) && (rcnt.errors() != 0)) ||
+            ((nSucceeded != inDirs.size()) && (rcnt.errors() == 0)))
+        {
+            r = EC_OK;
+            throw (int)(__LINE__);
+        }
+
+        if (nSucceeded != inDirs.size()) r = EC_ERROR;
     }
     catch (std::filesystem::filesystem_error& ex)
     {
