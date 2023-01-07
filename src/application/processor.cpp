@@ -553,7 +553,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
         {
             fs::create_directories(outDirPath);
 
-            if (!fs::exists(outDir)) ERROR_PRINT_EC_THROWLINE("could not create OUTDIR", EC_OUTDIR_NOTCREATED);
+            if (!fs::exists(outDir)) ERROR_PRINT_EC_THROWLINE("failed to create OUTDIR", EC_OUTDIR_NOTCREATED);
         }
 
 
