@@ -90,11 +90,13 @@ int main(int argc, char** argv)
     if (args.size() == 0)
     {
         // INDIR
-        args.add("../../../test/system/Emily");
-        args.add("../../../test/system/Joe");
-        args.add("../../../test/system/Mary");
-        //args.add("../../../test/system/SomeOneElse");
-        args.add("../../../test/system/empty");
+        args.add("../../../test/system/Emily/");
+        args.add("../../../test/system/Joe/");
+        args.add("../../../test/system/Mary/");
+        //args.add("../../../test/system/SomeOneElse/");
+        args.add("../../../test/system/empty/");
+        args.add("../../../test/system/a-file/");
+        args.add("../../../test/system/Emily2/Emily");
 
         // OUTDIR
         args.add("../../../test/system/out-merged");

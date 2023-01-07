@@ -21,12 +21,24 @@ copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 
 #include <omw/cli.h>
 #include <omw/string.h>
+#include <omw/vector.h>
 
+
+#define IMPLEMENT_FLAGS()           \
+const bool quiet = flags.quiet;     \
+bool ___verbose = flags.verbose;    \
+const bool& verbose = ___verbose;   \
+if (quiet) ___verbose = false;
 
 #define ERROR_PRINT(msg)            \
 {                                   \
     rcnt.incErrors();               \
     if (!quiet) printError(msg);    \
+}
+
+#define INFO_PRINT(msg)         \
+{                               \
+    if (!quiet) printInfo(msg); \
 }
 
 #define WARNING_PRINT(msg)          \
@@ -280,6 +292,7 @@ namespace
         return r;
     }
 
+    // returns SCHEME::unknown if the rate is too small
     scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
     {
         scheme_t r = SCHEME::unknown;
@@ -357,23 +370,81 @@ namespace
         return r;
     }
 
-    int process_huawai(const std::string& inDir, const std::string& outDir, const app::Flags& flags)
+    void process_huawai(const std::string& inDir, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
     {
-        // TODO implement
-        return (-1);
+        IMPLEMENT_FLAGS();
+
+        
+
+        //throw (int)(__LINE__);
     }
 
-    int process_samsung(const std::string& inDir, const std::string& outDir, const app::Flags& flags)
+    void process_samsung(const std::string& inDir, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
     {
-        // TODO implement
-        return (-1);
+        IMPLEMENT_FLAGS();
+        WARNING_PRINT("not implemented");
     }
 
-    int process_wp(const std::string& inDir, const std::string& outDir, const app::Flags& flags)
+    void process_winphone(const std::string& inDir, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
     {
-        // TODO implement
-        return (-1);
+        IMPLEMENT_FLAGS();
+        WARNING_PRINT("not implemented");
+        INFO_PRINT("WP");
     }
+
+    void process(const scheme_t& scheme, const std::string& inDir, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
+    {
+        IMPLEMENT_FLAGS();
+
+        switch (scheme)
+        {
+        case SCHEME::unknown:
+            ERROR_PRINT("Unknown scheme");
+            break;
+
+        case SCHEME::huawai:
+            process_huawai(inDir, outDir, flags, rcnt);
+            break;
+
+        case SCHEME::samsung:
+            process_samsung(inDir, outDir, flags, rcnt);
+            break;
+
+        case SCHEME::winphone:
+            process_winphone(inDir, outDir, flags, rcnt);
+            break;
+
+        default:
+            throw (int)(__LINE__);
+            break;
+        }
+    }
+
+#if defined(PRJ_DEBUG)
+    void dbg_rm_outDir(const std::string& outDir)
+    {
+        try
+        {
+            const auto n = fs::remove_all(outDir);
+            cout << omw::fgBrightBlack << "rm OUTDIR: " << n << " items deleted" << omw::fgDefault << endl;
+        }
+        catch (const std::filesystem::filesystem_error& ex)
+        {
+            cout << omw::fgBrightMagenta << __FUNCTION__ << omw::fgDefault << endl;
+            throw ex;
+        }
+        catch (const std::system_error& ex)
+        {
+            cout << omw::fgBrightMagenta << __FUNCTION__ << omw::fgDefault << endl;
+            throw ex;
+        }
+        catch (const std::exception& ex)
+        {
+            cout << omw::fgBrightMagenta << __FUNCTION__ << omw::fgDefault << endl;
+            throw ex;
+        }
+    }
+#endif
 
 
 
@@ -423,21 +494,23 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
 {
     int r = EC_OK; // set to OK because of catch(...) and foreach inDirs
 
-    const bool quiet = flags.quiet;
-    bool ___verbose = flags.verbose;
-    const bool& verbose = ___verbose;
-    if (quiet) ___verbose = false;
+    IMPLEMENT_FLAGS();
 
     try
     {
         util::ResultCounter rcnt = 0;
         size_t nSucceeded = 0;
+        omw::vector<std::string> postfixes;
 
         std::vector<fs::path> ___inDirPaths(inDirs.size());
         const std::vector<fs::path>& inDirPaths = ___inDirPaths;
         const fs::path outDirPath = outDir;
         for (size_t i = 0; i < inDirs.size(); ++i) ___inDirPaths.at(i) = inDirs[i];
 
+
+#if defined(PRJ_DEBUG)
+        dbg_rm_outDir(outDir);
+#endif
 
 
         ///////////////////////////////////////////////////////////
@@ -500,18 +573,23 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             const util::ResultCounter::counter_type nErrorsOld = rcnt.errors();
             const auto& inDir = inDirs[i_inDir];
 
-            scheme = detectScheme(inDir, &rate);
-            printFormattedLine("###\"" + inDir + "\" " + toString(scheme) + (scheme == SCHEME::unknown ? "" : " (" + std::to_string((int)round(rate * 100)) + "%)"));
-
-            if (fs::exists(inDir))
+            if (fs::directory_entry(inDir).is_directory())
             {
-                if (!fs::is_empty(inDir))
+                scheme = detectScheme(inDir, &rate);
+                printFormattedLine("###\"" + inDir + "\" " + toString(scheme) + (scheme == SCHEME::unknown ? "" : " (" + std::to_string((int)round(rate * 100)) + "%)"));
+
+                if (fs::exists(inDir))
                 {
-                    if(!quiet) printInfo("processing not yet implemented");
+                    if (!fs::is_empty(inDir)) ::process(scheme, inDir, outDir, flags, rcnt);
+                    else WARNING_PRINT("INDIR is empty");
                 }
-                else WARNING_PRINT("INDIR is empty");
+                else ERROR_PRINT("INDIR does not exist");
             }
-            else ERROR_PRINT("INDIR does not exist");
+            else
+            {
+                printFormattedLine("###\"" + inDir + "\"");
+                ERROR_PRINT("INDIR is not a directory");
+            }
 
             if (rcnt.errors() == nErrorsOld) ++nSucceeded;
         }
@@ -556,7 +634,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
 
         if (nSucceeded != inDirs.size()) r = EC_ERROR;
     }
-    catch (std::filesystem::filesystem_error& ex)
+    catch (const std::filesystem::filesystem_error& ex)
     {
         r = EC_ERROR;
         if (!quiet)
@@ -570,7 +648,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             cout << "    what:  " << ex.what() << endl;
         }
     }
-    catch (std::system_error& ex)
+    catch (const std::system_error& ex)
     {
         r = EC_ERROR;
         if (!quiet)
@@ -582,7 +660,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             cout << "    what:  " << ex.what() << endl;
         }
     }
-    catch (std::exception& ex)
+    catch (const std::exception& ex)
     {
         r = EC_ERROR;
         if (!quiet)
