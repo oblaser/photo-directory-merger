@@ -1,6 +1,6 @@
 /*
 author          Oliver Blaser
-date            04.01.2023
+date            10.01.2023
 copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 */
 
@@ -189,6 +189,16 @@ namespace
         {
             if (fs::exists(inDirs[i])) r = fs::equivalent(inDirs[i], outDir);
         }
+
+        return r;
+    }
+
+    omw::string getDirName(const fs::path& dir)
+    {
+        omw::string r;
+        
+        if (dir.has_filename()) r = dir.filename().u8string();
+        else r = dir.parent_path().filename().u8string();
 
         return r;
     }
@@ -567,6 +577,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
 
         double rate = 0;
         scheme_t scheme;
+        omw::vector<omw::string> usedInDirNames;
 
         for (size_t i_inDir = 0; i_inDir < inDirs.size(); ++i_inDir)
         {
@@ -580,7 +591,17 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
 
                 if (fs::exists(inDir))
                 {
-                    if (!fs::is_empty(inDir)) ::process(scheme, inDir, outDir, flags, rcnt);
+                    if (!fs::is_empty(inDir))
+                    {
+                        const auto inDirName = getDirName(inDir);
+                        
+                        if (!usedInDirNames.contains(inDirName))
+                        {
+                            usedInDirNames.push_back(inDirName);
+                            ::process(scheme, inDir, outDir, flags, rcnt);
+                        }
+                        else ERROR_PRINT("INDIR name was already used");
+                    }
                     else WARNING_PRINT("INDIR is empty");
                 }
                 else ERROR_PRINT("INDIR does not exist");
