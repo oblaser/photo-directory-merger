@@ -249,11 +249,15 @@ namespace
         return r;
     }
 
+    constexpr size_t nTokensHuawai = 3;
+    constexpr size_t nTokensSamsung = 2;
+    constexpr size_t nTokensWinPhone = 6;
+
     bool schemeIsHuawai(const omw::stringVector_t& tokens)
     {
         bool r = false;
 
-        if (tokens.size() >= 3)
+        if (tokens.size() >= nTokensHuawai)
         {
             if ((tokens[0] == "IMG") &&
                 (tokens[1].length() == 8) && omw::isUInteger(tokens[1]) &&
@@ -270,7 +274,7 @@ namespace
     {
         bool r = false;
 
-        if (tokens.size() >= 2)
+        if (tokens.size() >= nTokensSamsung)
         {
             if ((tokens[0].length() == 8) && omw::isUInteger(tokens[0]) &&
                 (tokens[1].length() == 6) && omw::isUInteger(tokens[1]))
@@ -286,7 +290,7 @@ namespace
     {
         bool r = false;
 
-        if (tokens.size() >= 6)
+        if (tokens.size() >= nTokensWinPhone)
         {
             if ((tokens[0] == "WP") &&
                 (tokens[1].length() == 8) && omw::isUInteger(tokens[1]) &&
@@ -298,6 +302,22 @@ namespace
                 r = true;
             }
         }
+
+        return r;
+    }
+
+    scheme_t detectScheme(const omw::stringVector_t& tokens)
+    {
+        scheme_t r = SCHEME::unknown;
+
+        const bool huawai = schemeIsHuawai(tokens);
+        const bool samsung = schemeIsSamsung(tokens);
+        const bool wp = schemeIsWinPhone(tokens);
+
+        if (huawai && !samsung && !wp) r = SCHEME::huawai;
+        else if (!huawai && samsung && !wp) r = SCHEME::samsung;
+        else if (!huawai && !samsung && wp) r = SCHEME::winphone;
+        // else nop
 
         return r;
     }
@@ -380,53 +400,67 @@ namespace
         return r;
     }
 
-    void process_huawai(const std::string& inDir, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
+    // YYYYMMDD_hhmmss_NAME_...
+    std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& tokens, const std::string& inDirName)
     {
-        IMPLEMENT_FLAGS();
-
-        
-
-        //throw (int)(__LINE__);
-    }
-
-    void process_samsung(const std::string& inDir, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
-    {
-        IMPLEMENT_FLAGS();
-        WARNING_PRINT("not implemented");
-    }
-
-    void process_winphone(const std::string& inDir, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
-    {
-        IMPLEMENT_FLAGS();
-        WARNING_PRINT("not implemented");
-        INFO_PRINT("WP");
-    }
-
-    void process(const scheme_t& scheme, const std::string& inDir, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
-    {
-        IMPLEMENT_FLAGS();
+        std::string r;
+        size_t nTokens;
 
         switch (scheme)
         {
-        case SCHEME::unknown:
-            ERROR_PRINT("Unknown scheme");
-            break;
-
         case SCHEME::huawai:
-            process_huawai(inDir, outDir, flags, rcnt);
+            r = tokens[1] + '-' + tokens[2];
+            nTokens = nTokensHuawai;
             break;
 
         case SCHEME::samsung:
-            process_samsung(inDir, outDir, flags, rcnt);
+            r = tokens[0] + '-' + tokens[1];
+            nTokens = nTokensSamsung;
             break;
 
         case SCHEME::winphone:
-            process_winphone(inDir, outDir, flags, rcnt);
+            r = tokens[1] + '-' + tokens[2] + tokens[3] + tokens[4];
+            nTokens = nTokensWinPhone;
             break;
 
         default:
             throw (int)(__LINE__);
             break;
+        }
+
+        r += '-' + inDirName;
+
+        for (size_t i = nTokens; i < tokens.size(); ++i)
+        {
+            r += ('_' + tokens[i]);
+        }
+
+        return r;
+    }
+
+    void process(const scheme_t& scheme, const std::string& inDir, const std::string& inDirName, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
+    {
+        IMPLEMENT_FLAGS();
+
+        if (scheme == SCHEME::unknown) throw (int)(__LINE__);
+
+        for (const fs::directory_entry& entry : fs::directory_iterator(inDir))
+        {
+            if (entry.is_regular_file())
+            {
+                const fs::path inFile = entry.path();
+                const auto inFileStemTokens = omw_::split(inFile.stem().u8string(), '_');
+
+                if (scheme == detectScheme(inFileStemTokens))
+                {
+                    const auto outFileName = outFileStem(scheme, inFileStemTokens, inDirName) + inFile.extension().u8string();
+                    const fs::path outFile = outDir / fs::path(outFileName);
+#if defined(PRJ_DEBUG) && 1
+                    printFormattedLine("###\"" + inFile.u8string() + "\" -> \"" + outFile.u8string() + "\"");
+#endif
+                }
+                else ERROR_PRINT("###scheme mismatch with file \"" + inFile.u8string() + "\"");
+            }
         }
     }
 
@@ -589,22 +623,26 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
                 scheme = detectScheme(inDir, &rate);
                 printFormattedLine("###\"" + inDir + "\" " + toString(scheme) + (scheme == SCHEME::unknown ? "" : " (" + std::to_string((int)round(rate * 100)) + "%)"));
 
-                if (fs::exists(inDir))
+                if (scheme != SCHEME::unknown)
                 {
-                    if (!fs::is_empty(inDir))
+                    if (fs::exists(inDir))
                     {
-                        const auto inDirName = getDirName(inDir);
-                        
-                        if (!usedInDirNames.contains(inDirName))
+                        if (!fs::is_empty(inDir))
                         {
-                            usedInDirNames.push_back(inDirName);
-                            ::process(scheme, inDir, outDir, flags, rcnt);
+                            const auto inDirName = getDirName(inDir);
+
+                            if (!usedInDirNames.contains(inDirName))
+                            {
+                                usedInDirNames.push_back(inDirName);
+                                ::process(scheme, inDir, inDirName, outDir, flags, rcnt);
+                            }
+                            else ERROR_PRINT("INDIR name was already used");
                         }
-                        else ERROR_PRINT("INDIR name was already used");
+                        else WARNING_PRINT("INDIR is empty");
                     }
-                    else WARNING_PRINT("INDIR is empty");
+                    else ERROR_PRINT("INDIR does not exist");
                 }
-                else ERROR_PRINT("INDIR does not exist");
+                else ERROR_PRINT("unknown scheme");
             }
             else
             {
