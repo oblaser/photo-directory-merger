@@ -160,9 +160,13 @@ namespace
         printFormattedText(text);
         cout << endl;
     }
-    void printInfo(const std::string& text)
+    void printInfo()
     {
         cout << omw::fgBrightCyan << std::left << std::setw(ewiWidth) << "info:" << omw::defaultForeColor;
+    }
+    void printInfo(const std::string& text)
+    {
+        printInfo();
         printFormattedText(text);
         cout << endl;
     }
@@ -513,7 +517,7 @@ namespace
                         if (cliChoice("overwrite destination file?") == 1) opt = fs::copy_options::overwrite_existing;
                         else perform = false;
                     }
-                    else
+                    else if(outFileExists)
                     {
                         perform = false;
                         ERROR_PRINT("###destination file \"" + outFile.u8string() + "\" exists");
@@ -539,8 +543,25 @@ namespace
                 }
                 else
                 {
-                    ERROR_PRINT("###scheme mismatch with file \"" + inFile.u8string() + "\"");
-                    // TODO if verbose print 'cp "inFile" "outfile_inDirName"'
+                    ERROR_PRINT("###scheme mismatch on file \"" + inFile.u8string() + "\", file not copied");
+
+                    if (verbose)
+                    {
+                        std::string outFileName = inFile.stem().u8string() + '_' + inDirName + inFile.extension().u8string();
+                        const fs::path outFile = outDir / fs::path(outFileName);
+
+                        printInfo();
+                        cout << "you may use: " << omw::fgBrightWhite;
+#if defined(OMW_PLAT_UNIX)
+                        cout << "cp";
+#elif defined(OMW_PLAT_WIN)
+                        cout << "copy";
+#else
+                        cout << "<COPY>";
+#endif // OMW_PLAT_x
+                        cout << " \"" + inFile.u8string() + "\" \"" + outFile.u8string() + "\"";
+                        cout << omw::fgDefault << endl;
+                    }
                 }
             }
         }
@@ -641,10 +662,6 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
         ///////////////////////////////////////////////////////////
         // process
         ///////////////////////////////////////////////////////////
-
-#ifndef PRJ_DEBUG
-#error "not implemented"
-#endif
 
         double rate = 0;
         scheme_t scheme;
