@@ -104,7 +104,10 @@ int main(int argc, char** argv)
 
         // options
         //args.add("-vf");
+        //args.add("-v");
+        args.add("-f");
         //args.add("-h");
+        //args.add("-q");
         //args.add("--version");
     }
 #endif

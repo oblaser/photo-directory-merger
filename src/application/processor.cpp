@@ -1,6 +1,6 @@
 /*
 author          Oliver Blaser
-date            10.01.2023
+date            12.01.2023
 copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 */
 
@@ -178,6 +178,47 @@ namespace
         //cout << omw::fgBrightWhite << title << omw::normal << endl;
         cout << title << endl;
     }
+
+
+
+#pragma region library
+    int cliChoice(const std::string& q, int def = 0, char first = 'y', char second = 'n')
+    {
+        int r = 0;
+        const omw::string a(1, first);
+        const omw::string b(1, second);
+        omw::string data;
+
+        do
+        {
+            std::cout << q << " [" << (def == 1 ? a.toUpper_ascii() : a) << "/" << (def == 2 ? b.toUpper_ascii() : b) << "] ";
+            std::getline(std::cin, data);
+
+            if (data.toLower_ascii() == a) r = 1;
+            else if (data.toLower_ascii() == b) r = 2;
+            else if (data.length() == 0) r = def;
+            else r = 0;
+        }
+        while ((r != 1) && (r != 2));
+
+        return r;
+    }
+
+    omw::string to_string(uint64_t val, int base, const char* digits)
+    {
+        omw::string r = "";
+
+        if (val == 0) r += digits[0];
+
+        while (val != 0)
+        {
+            r = digits[val % base] + r; // use reverse() instead
+            val /= base;
+        }
+
+        return r;
+    }
+#pragma endregion
 
 
 
@@ -409,17 +450,17 @@ namespace
         switch (scheme)
         {
         case SCHEME::huawai:
-            r = tokens[1] + '-' + tokens[2];
+            r = tokens[1] + '-' + tokens[2] + '-' + inDirName;
             nTokens = nTokensHuawai;
             break;
 
         case SCHEME::samsung:
-            r = tokens[0] + '-' + tokens[1];
+            r = tokens[0] + '-' + tokens[1] + '-' + inDirName;
             nTokens = nTokensSamsung;
             break;
 
         case SCHEME::winphone:
-            r = tokens[1] + '-' + tokens[2] + tokens[3] + tokens[4];
+            r = tokens[1] + '-' + tokens[2] + tokens[3] + tokens[4] + '-' + inDirName + '-' + tokens[0];
             nTokens = nTokensWinPhone;
             break;
 
@@ -427,8 +468,6 @@ namespace
             throw (int)(__LINE__);
             break;
         }
-
-        r += '-' + inDirName;
 
         for (size_t i = nTokens; i < tokens.size(); ++i)
         {
@@ -455,11 +494,54 @@ namespace
                 {
                     const auto outFileName = outFileStem(scheme, inFileStemTokens, inDirName) + inFile.extension().u8string();
                     const fs::path outFile = outDir / fs::path(outFileName);
-#if defined(PRJ_DEBUG) && 1
+
+#if defined(PRJ_DEBUG) && 0
                     printFormattedLine("###\"" + inFile.u8string() + "\" -> \"" + outFile.u8string() + "\"");
 #endif
+                    const bool outFileExists = fs::exists(outFile);
+                    bool perform = true;
+                    fs::copy_options opt = fs::copy_options::none;
+
+                    if (outFileExists && flags.force)
+                    {
+                        opt = fs::copy_options::overwrite_existing;
+                        if (verbose) WARNING_PRINT("###overwriting destination file \"" + outFile.u8string() + "\"");
+                    }
+                    else if (outFileExists && verbose)
+                    {
+                        printInfo("###destination file \"" + outFile.u8string() + "\" exists");
+                        if (cliChoice("overwrite destination file?") == 1) opt = fs::copy_options::overwrite_existing;
+                        else perform = false;
+                    }
+                    else
+                    {
+                        perform = false;
+                        ERROR_PRINT("###destination file \"" + outFile.u8string() + "\" exists");
+                    }
+
+                    if (perform)
+                    {
+                        std::error_code ec;
+                        const bool copied = fs::copy_file(inFile, outFile, opt, ec);
+
+                        if ((copied && !(ec.value() == 0)) ||
+                            (!copied && (ec.value() == 0)))
+                        {
+                            throw (int)(__LINE__);
+                        }
+
+                        if (ec.value() != 0)
+                        {
+                            ERROR_PRINT("###failed to copy file \"" + inFile.u8string() + "\" to \"" + outFile.u8string() + "\"");
+                            if (verbose) printInfo(ec.message());
+                        }
+                    }
                 }
-                else ERROR_PRINT("###scheme mismatch with file \"" + inFile.u8string() + "\"");
+                else
+                {
+                    ERROR_PRINT("###scheme mismatch with file \"" + inFile.u8string() + "\"");
+                    // TODO if verbose print 'cp "inFile" "outfile_inDirName"'
+                }
             }
         }
     }
@@ -489,47 +571,6 @@ namespace
         }
     }
 #endif
-
-
-
-#pragma region library
-    int cliChoice(const std::string& q, int def = 0, char first = 'y', char second = 'n')
-    {
-        int r = 0;
-        const omw::string a(1, first);
-        const omw::string b(1, second);
-        omw::string data;
-
-        do
-        {
-            std::cout << q << " [" << (def == 1 ? a.toUpper_ascii() : a) << "/" << (def == 2 ? b.toUpper_ascii() : b) << "] ";
-            std::getline(std::cin, data);
-
-            if (data.toLower_ascii() == a) r = 1;
-            else if (data.toLower_ascii() == b) r = 2;
-            else if (data.length() == 0) r = def;
-            else r = 0;
-        }
-        while (r == 0);
-
-        return r;
-    }
-
-    omw::string to_string(uint64_t val, int base, const char* digits)
-    {
-        omw::string r = "";
-
-        if (val == 0) r += digits[0];
-
-        while (val != 0)
-        {
-            r = digits[val % base] + r; // use reverse() instead
-            val /= base;
-        }
-
-        return r;
-    }
-#pragma endregion
 }
 
 
@@ -552,7 +593,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
         for (size_t i = 0; i < inDirs.size(); ++i) ___inDirPaths.at(i) = inDirs[i];
 
 
-#if defined(PRJ_DEBUG)
+#if defined(PRJ_DEBUG) && 0
         dbg_rm_outDir(outDir);
 #endif
 
@@ -569,11 +610,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             {
                 if (flags.force)
                 {
-                    if (verbose)
-                    {
-                        rcnt.incWarnings();
-                        printWarning("using non empty OUTDIR");
-                    }
+                    if (verbose) WARNING_PRINT("using non empty OUTDIR");
                 }
                 else
                 {
@@ -621,7 +658,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             if (fs::directory_entry(inDir).is_directory())
             {
                 scheme = detectScheme(inDir, &rate);
-                printFormattedLine("###\"" + inDir + "\" " + toString(scheme) + (scheme == SCHEME::unknown ? "" : " (" + std::to_string((int)round(rate * 100)) + "%)"));
+                if (!quiet) printFormattedLine("###\"" + inDir + "\" " + toString(scheme) + (scheme == SCHEME::unknown ? "" : " (" + std::to_string((int)round(rate * 100)) + "%)"));
 
                 if (scheme != SCHEME::unknown)
                 {
@@ -646,7 +683,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             }
             else
             {
-                printFormattedLine("###\"" + inDir + "\"");
+                if (!quiet) printFormattedLine("###\"" + inDir + "\"");
                 ERROR_PRINT("INDIR is not a directory");
             }
 
