@@ -1,6 +1,6 @@
 /*
 author          Oliver Blaser
-date            12.01.2023
+date            11.02.2023
 copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 */
 
@@ -690,7 +690,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
                                 usedInDirNames.push_back(inDirName);
                                 ::process(scheme, inDir, inDirName, outDir, flags, rcnt);
                             }
-                            else ERROR_PRINT("INDIR name was already used");
+                            else ERROR_PRINT("INDIR name was already used, no files copied");
                         }
                         else WARNING_PRINT("INDIR is empty");
                     }
