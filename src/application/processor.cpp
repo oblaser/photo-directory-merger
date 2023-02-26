@@ -1,6 +1,6 @@
 /*
 author          Oliver Blaser
-date            11.02.2023
+date            26.02.2023
 copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 */
 
@@ -491,7 +491,7 @@ namespace
         {
             if (entry.is_regular_file())
             {
-                const fs::path inFile = entry.path();
+                const fs::path inFile = (fs::path(entry.path())).make_preferred();
                 const auto inFileStemTokens = omw_::split(inFile.stem().u8string(), '_');
 
                 if (scheme == detectScheme(inFileStemTokens))
@@ -548,7 +548,7 @@ namespace
                     if (verbose)
                     {
                         std::string outFileName = inFile.stem().u8string() + '_' + inDirName + inFile.extension().u8string();
-                        const fs::path outFile = outDir / fs::path(outFileName);
+                        const fs::path outFile = (fs::path(outDir) / outFileName).make_preferred();
 
                         printInfo();
                         cout << "you may use: " << omw::fgBrightWhite;
@@ -675,7 +675,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             if (fs::directory_entry(inDir).is_directory())
             {
                 scheme = detectScheme(inDir, &rate);
-                if (!quiet) printFormattedLine("###\"" + inDir + "\" " + toString(scheme) + (scheme == SCHEME::unknown ? "" : " (" + std::to_string((int)round(rate * 100)) + "%)"));
+                if (!quiet) printFormattedLine("###\"" + (fs::path(inDir)).make_preferred().u8string() + "\" " + toString(scheme) + (scheme == SCHEME::unknown ? "" : " (" + std::to_string((int)round(rate * 100)) + "%)"));
 
                 if (scheme != SCHEME::unknown)
                 {
