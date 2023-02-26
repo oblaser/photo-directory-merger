@@ -678,8 +678,10 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
 
         for (size_t i_inDir = 0; i_inDir < inDirs.size(); ++i_inDir)
         {
-            const util::ResultCounter::counter_type nErrorsOld = rcnt.errors();
+            const auto nErrorsOld = rcnt.errors();
             const auto& inDir = inDirs[i_inDir];
+
+            if (verbose && (i_inDir > 0)) cout << endl;
 
             if (fs::directory_entry(inDir).is_directory())
             {
@@ -724,6 +726,8 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
 
         if (!quiet)
         {
+            if (verbose && (inDirs.size() > 1)) cout << endl;
+
             cout << "========";
 
             cout << "  " << omw::fgBrightWhite;
@@ -746,8 +750,8 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
 
             cout << " ========" << endl;
 
-            //printFormattedLine("###copied @" + std::to_string(fileCnt.copied()) + "/" + std::to_string(fileCnt.total()) + "@ files");
-            printFormattedLine("copied " + std::to_string(fileCnt.copied()) + "/" + std::to_string(fileCnt.total()) + " files");
+            //if (verbose) printFormattedLine("###copied @" + std::to_string(fileCnt.copied()) + "/" + std::to_string(fileCnt.total()) + "@ files");
+            if (verbose) printFormattedLine("copied " + std::to_string(fileCnt.copied()) + "/" + std::to_string(fileCnt.total()) + " files");
         }
 
         //if (verbose) cout << "\n" << omw::fgBrightGreen << "done" << omw::defaultForeColor << endl;
