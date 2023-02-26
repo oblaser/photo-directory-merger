@@ -297,6 +297,7 @@ namespace
     constexpr size_t nTokensHuawai = 3;
     constexpr size_t nTokensSamsung = 2;
     constexpr size_t nTokensWinPhone = 6;
+    constexpr size_t nTokensMax = nTokensWinPhone;
 
     bool schemeIsHuawai(const omw::stringVector_t& tokens)
     {
@@ -304,7 +305,7 @@ namespace
 
         if (tokens.size() >= nTokensHuawai)
         {
-            if ((tokens[0] == "IMG") &&
+            if (((tokens[0] == "IMG") || (tokens[0] == "VID")) &&
                 (tokens[1].length() == 8) && omw::isUInteger(tokens[1]) &&
                 (tokens[2].length() == 6) && omw::isUInteger(tokens[2]))
             {
@@ -404,7 +405,7 @@ namespace
 
             for (size_t i = 0; i < analyze.size(); ++i)
             {
-                const auto tokens = analyze[i].split('_', 7); // maxNTokens + 1
+                const auto tokens = analyze[i].split('_', nTokensMax + 1);
                 if (schemeIsHuawai(tokens)) ++cnt_huawai;
                 if (schemeIsSamsung(tokens)) ++cnt_samsung;
                 if (schemeIsWinPhone(tokens)) ++cnt_winphone;
