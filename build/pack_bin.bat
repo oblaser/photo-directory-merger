@@ -27,7 +27,7 @@ copy ..\license.txt %OUTDIR%\%EXENAME%\
 @echo.>>%OUTDIR%\%EXENAME%\readme.txt
 @echo.phodime v%VERSIONSTR%>>%OUTDIR%\%EXENAME%\readme.txt
 @echo.Copyright (c) 2023 Oliver Blaser.>>%OUTDIR%\%EXENAME%\readme.txt
-@echo.License: GNU GPLv3 <http://gnu.org/licenses/>.>>%OUTDIR%\%EXENAME%\readme.txt
+@echo.License: GNU GPLv3 ^<http://gnu.org/licenses/^>.>>%OUTDIR%\%EXENAME%\readme.txt
 @echo.This is free software. There is NO WARRANTY.>>%OUTDIR%\%EXENAME%\readme.txt
 
 
