@@ -305,7 +305,7 @@ namespace
 
         if (tokens.size() >= nTokensHuawai)
         {
-            if (((tokens[0] == "IMG") || (tokens[0] == "VID")) &&
+            if (((tokens[0] == "IMG") || (tokens[0] == "VID") || (tokens[0] == "PANO")) &&
                 (tokens[1].length() == 8) && omw::isUInteger(tokens[1]) &&
                 (tokens[2].length() == 6) && omw::isUInteger(tokens[2]))
             {
