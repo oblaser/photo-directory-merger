@@ -482,9 +482,11 @@ namespace
         return r;
     }
 
-    void process(const scheme_t& scheme, const std::string& inDir, const std::string& inDirName, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
+    util::FileCounter process(const scheme_t& scheme, const std::string& inDir, const std::string& inDirName, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
     {
         IMPLEMENT_FLAGS();
+
+        util::FileCounter rFileCnt;
 
         if (scheme == SCHEME::unknown) throw (int)(__LINE__);
 
@@ -492,6 +494,8 @@ namespace
         {
             if (entry.is_regular_file())
             {
+                rFileCnt.addTotal();
+
                 const fs::path inFile = (fs::path(entry.path())).make_preferred();
                 const auto inFileStemTokens = omw_::split(inFile.stem().u8string(), '_');
 
@@ -535,7 +539,8 @@ namespace
                             throw (int)(__LINE__);
                         }
 
-                        if (ec.value() != 0)
+                        if (copied) rFileCnt.addCopied();
+                        else
                         {
                             ERROR_PRINT("###failed to copy file \"" + inFile.u8string() + "\" to \"" + outFile.u8string() + "\"");
                             if (verbose) printInfo(ec.message());
@@ -566,6 +571,8 @@ namespace
                 }
             }
         }
+
+        return rFileCnt;
     }
 
 #if defined(PRJ_DEBUG)
@@ -605,6 +612,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
 
     try
     {
+        util::FileCounter fileCnt;
         util::ResultCounter rcnt = 0;
         size_t nSucceeded = 0;
         omw::vector<std::string> postfixes;
@@ -615,7 +623,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
         for (size_t i = 0; i < inDirs.size(); ++i) ___inDirPaths.at(i) = inDirs[i];
 
 
-#if defined(PRJ_DEBUG) && 0
+#if defined(PRJ_DEBUG) && 1
         dbg_rm_outDir(outDir);
 #endif
 
@@ -689,7 +697,9 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
                             if (!usedInDirNames.contains(inDirName))
                             {
                                 usedInDirNames.push_back(inDirName);
-                                ::process(scheme, inDir, inDirName, outDir, flags, rcnt);
+                                const auto tmpFileCnt = ::process(scheme, inDir, inDirName, outDir, flags, rcnt);
+                                if (verbose) printInfo("###copied @" + std::to_string(tmpFileCnt.copied()) + "/" + std::to_string(tmpFileCnt.total()) + "@ files");
+                                fileCnt.add(tmpFileCnt);
                             }
                             else ERROR_PRINT("INDIR name was already used, no files copied");
                         }
@@ -735,6 +745,9 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             if (rcnt.warnings() != 1) cout << "s";
 
             cout << " ========" << endl;
+
+            //printFormattedLine("###copied @" + std::to_string(fileCnt.copied()) + "/" + std::to_string(fileCnt.total()) + "@ files");
+            printFormattedLine("copied " + std::to_string(fileCnt.copied()) + "/" + std::to_string(fileCnt.total()) + " files");
         }
 
         //if (verbose) cout << "\n" << omw::fgBrightGreen << "done" << omw::defaultForeColor << endl;
