@@ -9,12 +9,12 @@ The result is an output directory with chronological sorted photos, including
 the information who has taken the photo.
 
 #### Usage:
-```sh
+```
 phodime [options] INDIR [INDIR [INDIR [...]]] OUTDIR
 ```
 
 #### Example:
-```sh
+```
 $ cd ~/Pictures/our-great-trip-to-awesomeland/
 $ phodime -v Emily Joe Mary merged
 ```

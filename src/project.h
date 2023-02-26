@@ -27,7 +27,7 @@ namespace prj
 
     const char* const website = "https://github.com/oblaser/photo-directory-merger";
 
-    const omw::Version version(0, 1, 0, "alpha");
+    const omw::Version version(1, 0, 0);
 }
 
 
