@@ -502,7 +502,16 @@ namespace
                 rFileCnt.addTotal();
 
                 const fs::path inFile = (fs::path(entry.path())).make_preferred();
-                const auto inFileStemTokens = omw_::split(inFile.stem().u8string(), inFileDelimiter);
+                auto ___inFileStemTokens = omw_::split(inFile.stem().u8string(), inFileDelimiter);
+                const auto& inFileStemTokens = ___inFileStemTokens;
+
+                if ((inFileStemTokens.size() == 2) && inFileStemTokens.back().contains('(') && inFileStemTokens.back().contains(')'))
+                {
+                    // TODO
+                    // - check if (x) is uintstr
+                    // - remove (x)
+                    // - append x to tokens
+                }
 
                 if (scheme == detectScheme(inFileStemTokens))
                 {
