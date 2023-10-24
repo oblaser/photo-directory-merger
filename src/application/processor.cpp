@@ -256,6 +256,8 @@ namespace
 
 
 
+    constexpr char inFileDelimiter = '_';
+
     typedef enum SCHEME
     {
         unknown = 0,
@@ -446,7 +448,10 @@ namespace
         return r;
     }
 
-    // YYYYMMDD_hhmmss_NAME_...
+    constexpr char outFileDelimiter = '-';
+    constexpr char outFileDelimiter_opt = '_';
+
+    // YYYYMMDD-hhmmss-NAME[_...]
     std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& tokens, const std::string& inDirName)
     {
         std::string r;
@@ -455,17 +460,17 @@ namespace
         switch (scheme)
         {
         case SCHEME::huawai:
-            r = tokens[1] + '-' + tokens[2] + '-' + inDirName;
+            r = tokens[1] + outFileDelimiter + tokens[2] + outFileDelimiter + inDirName;
             nTokens = nTokensHuawai;
             break;
 
         case SCHEME::samsung:
-            r = tokens[0] + '-' + tokens[1] + '-' + inDirName;
+            r = tokens[0] + outFileDelimiter + tokens[1] + outFileDelimiter + inDirName;
             nTokens = nTokensSamsung;
             break;
 
         case SCHEME::winphone:
-            r = tokens[1] + '-' + tokens[2] + tokens[3] + tokens[4] + '-' + inDirName + '-' + tokens[0];
+            r = tokens[1] + outFileDelimiter + tokens[2] + tokens[3] + tokens[4] + outFileDelimiter + inDirName + outFileDelimiter + tokens[0];
             nTokens = nTokensWinPhone;
             break;
 
@@ -476,7 +481,7 @@ namespace
 
         for (size_t i = nTokens; i < tokens.size(); ++i)
         {
-            r += ('_' + tokens[i]);
+            r += (outFileDelimiter_opt + tokens[i]);
         }
 
         return r;
@@ -497,7 +502,7 @@ namespace
                 rFileCnt.addTotal();
 
                 const fs::path inFile = (fs::path(entry.path())).make_preferred();
-                const auto inFileStemTokens = omw_::split(inFile.stem().u8string(), '_');
+                const auto inFileStemTokens = omw_::split(inFile.stem().u8string(), inFileDelimiter);
 
                 if (scheme == detectScheme(inFileStemTokens))
                 {
@@ -553,7 +558,7 @@ namespace
 
                     if (verbose)
                     {
-                        std::string outFileName = inFile.stem().u8string() + '_' + inDirName + inFile.extension().u8string();
+                        std::string outFileName = inFile.stem().u8string() + outFileDelimiter + inDirName + inFile.extension().u8string();
                         const fs::path outFile = (fs::path(outDir) / outFileName).make_preferred();
 
                         printInfo();
@@ -754,14 +759,14 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             if (verbose) printFormattedLine("copied " + std::to_string(fileCnt.copied()) + "/" + std::to_string(fileCnt.total()) + " files");
         }
 
-        //if (verbose) cout << "\n" << omw::fgBrightGreen << "done" << omw::defaultForeColor << endl;
-
         if (((nSucceeded == inDirs.size()) && (rcnt.errors() != 0)) ||
             ((nSucceeded != inDirs.size()) && (rcnt.errors() == 0)))
         {
             r = EC_OK;
             throw (int)(__LINE__);
         }
+
+        //if (verbose) cout << "\n" << omw::fgBrightGreen << "done" << omw::defaultForeColor << endl;
 
         if (nSucceeded != inDirs.size()) r = EC_ERROR;
     }
