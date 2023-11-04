@@ -1,6 +1,6 @@
 /*
 author          Oliver Blaser
-date            26.02.2023
+date            04.11.2023
 copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 */
 
@@ -407,7 +407,7 @@ namespace
 
             for (size_t i = 0; i < analyze.size(); ++i)
             {
-                const auto tokens = analyze[i].split('_', nTokensMax + 1);
+                const auto tokens = analyze[i].split(inFileDelimiter, nTokensMax + 1);
                 if (schemeIsHuawai(tokens)) ++cnt_huawai;
                 if (schemeIsSamsung(tokens)) ++cnt_samsung;
                 if (schemeIsWinPhone(tokens)) ++cnt_winphone;
@@ -505,12 +505,18 @@ namespace
                 auto ___inFileStemTokens = omw_::split(inFile.stem().u8string(), inFileDelimiter);
                 const auto& inFileStemTokens = ___inFileStemTokens;
 
-                if ((inFileStemTokens.size() == 2) && inFileStemTokens.back().contains('(') && inFileStemTokens.back().contains(')'))
+                // Samsung multiple images in same second
+                if ((inFileStemTokens.size() >= nTokensSamsung) && inFileStemTokens[1].contains('(') && (inFileStemTokens[1].back() == ')'))
                 {
-                    // TODO
-                    // - check if (x) is uintstr
-                    // - remove (x)
-                    // - append x to tokens
+                    const auto samsungTimeTokens = inFileStemTokens[1].split('(');
+                    const auto& timeToken = samsungTimeTokens[0];
+                    const auto nToken = samsungTimeTokens[1].split(')')[0];
+
+                    if ((samsungTimeTokens.size() == 2) && omw::isUInteger(timeToken) && omw::isUInteger(nToken))
+                    {
+                        ___inFileStemTokens[1] = timeToken;
+                        ___inFileStemTokens.insert(___inFileStemTokens.begin() + 2, nToken);
+                    }
                 }
 
                 if (scheme == detectScheme(inFileStemTokens))
