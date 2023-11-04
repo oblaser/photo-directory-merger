@@ -5,7 +5,7 @@
 ### v1.0.2
 
 - Added PANO_* files in Huawai scheme
-- 
+- Detect Samsung multiple images in same second
 
 
 
