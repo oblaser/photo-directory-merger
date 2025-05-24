@@ -14,92 +14,98 @@ copyright       GNU GPLv3 - Copyright (c) 2022 Oliver Blaser
 
 #include <omw/omw.h>
 
-namespace argstr
+
+namespace argstr {
+
+// add new args to
+// - app::OptionList::checkOpt()
+// - Args::containsXY() const
+// - help text
+
+const char* const force = "-f";
+const char* const help = "-h";
+const char* const help_alt = "--help";
+const char* const noColor = "--no-color";
+const char* const quiet = "-q";
+const char* const verbose = "-v";
+const char* const version = "--version";
+
+} // namespace argstr
+
+
+
+namespace app {
+
+class FileList : public std::vector<omw::string>
 {
-    // add new args to
-    // - app::OptionList::checkOpt()
-    // - Args::containsXY() const
-    // - help text
+public:
+    FileList() {}
+    virtual ~FileList() {}
 
-    const char* const force = "-f";
-    const char* const help = "-h";
-    const char* const help_alt = "--help";
-    const char* const noColor = "--no-color";
-    const char* const quiet = "-q";
-    const char* const verbose = "-v";
-    const char* const version = "--version";
-}
+    virtual void add(const omw::string& file) { push_back(file); }
 
-namespace app
+    inline omw::string getFile(size_t idx) const;
+
+    bool isValid() const;
+};
+
+class OptionList : public std::vector<omw::string>
 {
-    class FileList : public std::vector<omw::string>
-    {
-    public:
-        FileList() {}
-        virtual ~FileList() {}
+public:
+    OptionList();
+    virtual ~OptionList() {}
 
-        virtual void add(const omw::string& file) { push_back(file); }
+    virtual void add(const omw::string& opt);
 
-        inline omw::string getFile(size_t idx) const;
+    virtual bool contains(const omw::string& arg) const;
 
-        bool isValid() const;
-    };
+    omw::string unrecognized() const;
 
-    class OptionList : public std::vector<omw::string>
-    {
-    public:
-        OptionList();
-        virtual ~OptionList() {}
+    bool isValid() const { return m_isValid; }
 
-        virtual void add(const omw::string& opt);
+private:
+    size_t m_unrecognizedIdx;
+    bool m_isValid;
 
-        virtual bool contains(const omw::string& arg) const;
+    void addOpt(const omw::string& opt);
+    bool checkOpt(const omw::string& opt) const;
+};
 
-        omw::string unrecognized() const;
+class Args
+{
+public:
+    Args() {}
+    Args(int argc, char** argv) { parse(argc, argv); }
+    virtual ~Args() {}
 
-        bool isValid() const { return m_isValid; }
+    void parse(int argc, char** argv);
+    void add(const omw::string& arg);
 
-    private:
-        size_t m_unrecognizedIdx;
-        bool m_isValid;
+    std::vector<std::string> inDirs() const;
+    std::string outDir() const;
 
-        void addOpt(const omw::string& opt);
-        bool checkOpt(const omw::string& opt) const;
-    };
+    OptionList& options() { return m_options; }
+    const OptionList& options() const { return m_options; }
+    bool containsForce() const { return m_options.contains(argstr::force); }
+    bool containsHelp() const { return (m_options.contains(argstr::help) || m_options.contains(argstr::help_alt)); }
+    bool containsNoColor() const { return m_options.contains(argstr::noColor); }
+    bool containsQuiet() const { return m_options.contains(argstr::quiet); }
+    bool containsVerbose() const { return m_options.contains(argstr::verbose); }
+    bool containsVersion() const { return m_options.contains(argstr::version); }
 
-    class Args
-    {
-    public:
-        Args() {}
-        Args(int argc, char** argv) { parse(argc, argv); }
-        virtual ~Args() {}
+    size_t count() const;
+    size_t size() const;
 
-        void parse(int argc, char** argv);
-        void add(const omw::string& arg);
+    bool isValid() const;
 
-        std::vector<std::string> inDirs() const;
-        std::string outDir() const;
+    const omw::string& operator[](size_t idx) const;
 
-        OptionList& options() { return m_options; }
-        const OptionList& options() const { return m_options; }
-        bool containsForce() const { return m_options.contains(argstr::force); }
-        bool containsHelp() const { return (m_options.contains(argstr::help) || m_options.contains(argstr::help_alt)); }
-        bool containsNoColor() const { return m_options.contains(argstr::noColor); }
-        bool containsQuiet() const { return m_options.contains(argstr::quiet); }
-        bool containsVerbose() const { return m_options.contains(argstr::verbose); }
-        bool containsVersion() const { return m_options.contains(argstr::version); }
+private:
+    FileList m_files;
+    OptionList m_options;
+};
 
-        size_t count() const;
-        size_t size() const;
+} // namespace app
 
-        bool isValid() const;
-
-        const omw::string& operator[](size_t idx) const;
-
-    private:
-        FileList m_files;
-        OptionList m_options;
-    };
-}
 
 #endif // IG_APP_CLIARG_H

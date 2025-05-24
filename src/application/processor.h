@@ -11,23 +11,24 @@ copyright       GNU GPLv3 - Copyright (c) 2022 Oliver Blaser
 #include <vector>
 
 
-namespace app
+namespace app {
+
+struct Flags
 {
-    struct Flags
-    {
-        Flags() = delete;
+    Flags() = delete;
 
-        Flags(bool force_, bool quiet_, bool verbose_)
-            : force(force_), quiet(quiet_), verbose(verbose_)
-        {}
+    Flags(bool force_, bool quiet_, bool verbose_)
+        : force(force_), quiet(quiet_), verbose(verbose_)
+    {}
 
-        bool force;
-        bool quiet;
-        bool verbose;
-    };
+    bool force;
+    bool quiet;
+    bool verbose;
+};
 
-    int process(const std::vector<std::string>& inDirs, const std::string& outDir, const app::Flags& flags);
-}
+int process(const std::vector<std::string>& inDirs, const std::string& outDir, const app::Flags& flags);
+
+} // namespace app
 
 
 #endif // IG_APP_PROCESSOR_H

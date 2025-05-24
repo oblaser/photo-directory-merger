@@ -24,36 +24,38 @@ copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 #include <omw/vector.h>
 
 
-#define IMPLEMENT_FLAGS()           \
-const bool quiet = flags.quiet;     \
-bool ___verbose = flags.verbose;    \
-const bool& verbose = ___verbose;   \
-if (quiet) ___verbose = false;
 
-#define ERROR_PRINT(msg)            \
-{                                   \
-    rcnt.incErrors();               \
-    if (!quiet) printError(msg);    \
-}
+#define IMPLEMENT_FLAGS()             \
+    const bool quiet = flags.quiet;   \
+    bool ___verbose = flags.verbose;  \
+    const bool& verbose = ___verbose; \
+    if (quiet) ___verbose = false;
 
-#define INFO_PRINT(msg)         \
-{                               \
-    if (!quiet) printInfo(msg); \
-}
+#define ERROR_PRINT(msg)             \
+    {                                \
+        rcnt.incErrors();            \
+        if (!quiet) printError(msg); \
+    }
 
-#define WARNING_PRINT(msg)          \
-{                                   \
-    rcnt.incWarnings();             \
-    if (!quiet) printWarning(msg);  \
-}
+#define INFO_PRINT(msg)             \
+    {                               \
+        if (!quiet) printInfo(msg); \
+    }
+
+#define WARNING_PRINT(msg)             \
+    {                                  \
+        rcnt.incWarnings();            \
+        if (!quiet) printWarning(msg); \
+    }
 
 #define ERROR_PRINT_EC_THROWLINE(msg, EC_x) \
-{                                   \
-    rcnt.incErrors();               \
-    if (!quiet) printError(msg);    \
-    r = EC_x;                       \
-    throw (int)(__LINE__);          \
-}
+    {                                       \
+        rcnt.incErrors();                   \
+        if (!quiet) printError(msg);        \
+        r = EC_x;                           \
+        throw (int)(__LINE__);              \
+    }
+
 
 
 using std::cout;
@@ -61,376 +63,352 @@ using std::endl;
 
 namespace fs = std::filesystem;
 
-namespace
+namespace {
+
+enum ERRORCODE // https://tldp.org/LDP/abs/html/exitcodes.html / on MSW are no preserved codes
 {
-    enum ERRORCODE // https://tldp.org/LDP/abs/html/exitcodes.html / on MSW are no preserved codes
+    EC_OK = 0,
+    EC_ERROR = 1,
+
+    EC__begin_ = 79,
+
+    EC_OUTDIR_NOTEMPTY = EC__begin_,
+    EC_INOUTDIR_EQ,
+    EC_OUTDIR_NOTCREATED,
+
+    EC_USER_ABORT, // not actually returned
+
+    EC__end_,
+
+    EC__max_ = 113
+};
+static_assert(EC__end_ <= EC__max_, "too many error codes defined");
+
+//
+// "### normal "quoted bright" white"
+// "### normal @just bright@ white"
+//
+void printFormattedText(const std::string& text)
+{
+    bool format = false;
+
+    if (text.length() > 5)
     {
-        EC_OK = 0,
-        EC_ERROR = 1,
+        if ((text[0] == '#') && (text[1] == '#') && (text[2] == '#')) { format = true; }
+    }
 
-        EC__begin_ = 79,
-
-        EC_OUTDIR_NOTEMPTY = EC__begin_,
-        EC_INOUTDIR_EQ,
-        EC_OUTDIR_NOTCREATED,
-
-        EC_USER_ABORT, // not actually returned
-
-        EC__end_,
-
-        EC__max_ = 113
-    };
-    static_assert(EC__end_ <= EC__max_, "too many error codes defined");
-
-    // 
-    // "### normal "quoted bright" white"
-    // "### normal @just bright@ white"
-    // 
-    void printFormattedText(const std::string& text)
+    if (format)
     {
-        bool format = false;
+        bool on = false;
 
-        if (text.length() > 5)
+        size_t i = 3;
+
+        while (i < text.length())
         {
-            if ((text[0] == '#') &&
-                (text[1] == '#') &&
-                (text[2] == '#')
-                )
+            if (text[i] == '\"')
             {
-                format = true;
+                if (on)
+                {
+                    cout << omw::defaultForeColor;
+                    cout << text[i];
+                    on = false;
+                }
+                else
+                {
+                    cout << text[i];
+                    cout << omw::fgBrightWhite;
+                    on = true;
+                }
             }
+            else if (text[i] == '@')
+            {
+                if (on)
+                {
+                    cout << omw::defaultForeColor;
+                    on = false;
+                }
+                else
+                {
+                    cout << omw::fgBrightWhite;
+                    on = true;
+                }
+            }
+            else cout << text[i];
+
+            ++i;
         }
 
-        if (format)
-        {
-            bool on = false;
-
-            size_t i = 3;
-
-            while (i < text.length())
-            {
-                if (text[i] == '\"')
-                {
-                    if (on)
-                    {
-                        cout << omw::defaultForeColor;
-                        cout << text[i];
-                        on = false;
-                    }
-                    else
-                    {
-                        cout << text[i];
-                        cout << omw::fgBrightWhite;
-                        on = true;
-                    }
-                }
-                else if (text[i] == '@')
-                {
-                    if (on)
-                    {
-                        cout << omw::defaultForeColor;
-                        on = false;
-                    }
-                    else
-                    {
-                        cout << omw::fgBrightWhite;
-                        on = true;
-                    }
-                }
-                else cout << text[i];
-
-                ++i;
-            }
-
-            cout << omw::defaultForeColor;
-        }
-        else cout << text;
+        cout << omw::defaultForeColor;
     }
+    else cout << text;
+}
 
-    void printFormattedLine(const std::string& text)
-    {
-        printFormattedText(text);
-        cout << endl;
-    }
+void printFormattedLine(const std::string& text)
+{
+    printFormattedText(text);
+    cout << endl;
+}
 
-    constexpr int ewiWidth = 10;
-    void printError(const std::string& text)
-    {
-        cout << omw::fgBrightRed << std::left << std::setw(ewiWidth) << "error:" << omw::defaultForeColor;
-        printFormattedText(text);
-        cout << endl;
-    }
-    void printInfo()
-    {
-        cout << omw::fgBrightCyan << std::left << std::setw(ewiWidth) << "info:" << omw::defaultForeColor;
-    }
-    void printInfo(const std::string& text)
-    {
-        printInfo();
-        printFormattedText(text);
-        cout << endl;
-    }
-    void printWarning(const std::string& text)
-    {
-        cout << omw::fgBrightYellow << std::left << std::setw(ewiWidth) << "warning:" << omw::defaultForeColor;
-        printFormattedText(text);
-        cout << endl;
-    }
+constexpr int ewiWidth = 10;
+void printError(const std::string& text)
+{
+    cout << omw::fgBrightRed << std::left << std::setw(ewiWidth) << "error:" << omw::defaultForeColor;
+    printFormattedText(text);
+    cout << endl;
+}
+void printInfo() { cout << omw::fgBrightCyan << std::left << std::setw(ewiWidth) << "info:" << omw::defaultForeColor; }
+void printInfo(const std::string& text)
+{
+    printInfo();
+    printFormattedText(text);
+    cout << endl;
+}
+void printWarning(const std::string& text)
+{
+    cout << omw::fgBrightYellow << std::left << std::setw(ewiWidth) << "warning:" << omw::defaultForeColor;
+    printFormattedText(text);
+    cout << endl;
+}
 
-    void printTitle(const std::string& title)
-    {
-        //cout << omw::fgBrightWhite << title << omw::normal << endl;
-        cout << title << endl;
-    }
+void printTitle(const std::string& title)
+{
+    // cout << omw::fgBrightWhite << title << omw::normal << endl;
+    cout << title << endl;
+}
 
 
 
 #pragma region library
-    int cliChoice(const std::string& q, int def = 0, char first = 'y', char second = 'n')
+int cliChoice(const std::string& q, int def = 0, char first = 'y', char second = 'n')
+{
+    int r = 0;
+    const omw::string a(1, first);
+    const omw::string b(1, second);
+    omw::string data;
+
+    do {
+        std::cout << q << " [" << (def == 1 ? a.toUpper_ascii() : a) << "/" << (def == 2 ? b.toUpper_ascii() : b) << "] ";
+        std::getline(std::cin, data);
+
+        if (data.toLower_ascii() == a) r = 1;
+        else if (data.toLower_ascii() == b) r = 2;
+        else if (data.length() == 0) r = def;
+        else r = 0;
+    }
+    while ((r != 1) && (r != 2));
+
+    return r;
+}
+
+omw::string to_string(uint64_t val, int base, const char* digits)
+{
+    omw::string r = "";
+
+    if (val == 0) r += digits[0];
+
+    while (val != 0)
     {
-        int r = 0;
-        const omw::string a(1, first);
-        const omw::string b(1, second);
-        omw::string data;
-
-        do
-        {
-            std::cout << q << " [" << (def == 1 ? a.toUpper_ascii() : a) << "/" << (def == 2 ? b.toUpper_ascii() : b) << "] ";
-            std::getline(std::cin, data);
-
-            if (data.toLower_ascii() == a) r = 1;
-            else if (data.toLower_ascii() == b) r = 2;
-            else if (data.length() == 0) r = def;
-            else r = 0;
-        }
-        while ((r != 1) && (r != 2));
-
-        return r;
+        r = digits[val % base] + r; // use reverse() instead
+        val /= base;
     }
 
-    omw::string to_string(uint64_t val, int base, const char* digits)
-    {
-        omw::string r = "";
-
-        if (val == 0) r += digits[0];
-
-        while (val != 0)
-        {
-            r = digits[val % base] + r; // use reverse() instead
-            val /= base;
-        }
-
-        return r;
-    }
+    return r;
+}
 #pragma endregion
 
 
 
-    bool equivalent(const std::vector<fs::path>& inDirs, const fs::path& outDir)
+bool equivalent(const std::vector<fs::path>& inDirs, const fs::path& outDir)
+{
+    bool r = false;
+
+    for (size_t i = 0; (i < inDirs.size()) && !r; ++i)
     {
-        bool r = false;
-
-        for (size_t i = 0; (i < inDirs.size()) && !r; ++i)
-        {
-            if (fs::exists(inDirs[i])) r = fs::equivalent(inDirs[i], outDir);
-        }
-
-        return r;
+        if (fs::exists(inDirs[i])) r = fs::equivalent(inDirs[i], outDir);
     }
 
-    omw::string getDirName(const fs::path& dir)
-    {
-        omw::string r;
-        
-        if (dir.has_filename()) r = dir.filename().u8string();
-        else r = dir.parent_path().filename().u8string();
+    return r;
+}
 
-        return r;
-    }
+omw::string getDirName(const fs::path& dir)
+{
+    omw::string r;
+
+    if (dir.has_filename()) r = dir.filename().u8string();
+    else r = dir.parent_path().filename().u8string();
+
+    return r;
+}
 
 
 
 #ifdef PRJ_DEBUG
-    const std::string magentaDebugStr = "\033[95mDEBUG\033[39m";
+const std::string magentaDebugStr = "\033[95mDEBUG\033[39m";
 #endif
 
 
 
-    constexpr char inFileDelimiter = '_';
+constexpr char inFileDelimiter = '_';
 
-    typedef enum SCHEME
+typedef enum SCHEME
+{
+    unknown = 0,
+    huawai,  // IMG_YYYYMMDD_hhmmss
+    samsung, // YYYYMMDD_hhmmss
+    winphone // WP_YYYYMMDD_hh_mm_ss_Pro
+} scheme_t;
+
+omw::string toString(const scheme_t& scheme)
+{
+    omw::string r = "ERROR";
+
+    switch (scheme)
     {
-        unknown = 0,
-        huawai,     // IMG_YYYYMMDD_hhmmss
-        samsung,    // YYYYMMDD_hhmmss
-        winphone    // WP_YYYYMMDD_hh_mm_ss_Pro
-    } scheme_t;
+    case SCHEME::unknown:
+        r = "Unknown";
+        break;
 
-    omw::string toString(const scheme_t& scheme)
+    case SCHEME::huawai:
+        r = "Huawai";
+        break;
+
+    case SCHEME::samsung:
+        r = "Samsung";
+        break;
+
+    case SCHEME::winphone:
+        r = "Winphone";
+        break;
+
+    default:
+        r = "ERROR";
+        break;
+    }
+
+    return r;
+}
+
+constexpr size_t nTokensHuawai = 3;
+constexpr size_t nTokensSamsung = 2;
+constexpr size_t nTokensWinPhone = 6;
+constexpr size_t nTokensMax = nTokensWinPhone;
+
+bool schemeIsHuawai(const omw::stringVector_t& tokens)
+{
+    bool r = false;
+
+    if (tokens.size() >= nTokensHuawai)
     {
-        omw::string r = "ERROR";
-
-        switch (scheme)
+        if (((tokens[0] == "IMG") || (tokens[0] == "VID") || (tokens[0] == "PANO")) && (tokens[1].length() == 8) && omw::isUInteger(tokens[1]) &&
+            (tokens[2].length() == 6) && omw::isUInteger(tokens[2]))
         {
-        case SCHEME::unknown:
-            r = "Unknown";
-            break;
+            r = true;
+        }
+    }
 
-        case SCHEME::huawai:
-            r = "Huawai";
-            break;
+    return r;
+}
 
-        case SCHEME::samsung:
-            r = "Samsung";
-            break;
+bool schemeIsSamsung(const omw::stringVector_t& tokens)
+{
+    bool r = false;
 
-        case SCHEME::winphone:
-            r = "Winphone";
-            break;
+    if (tokens.size() >= nTokensSamsung)
+    {
+        if ((tokens[0].length() == 8) && omw::isUInteger(tokens[0]) && (tokens[1].length() == 6) && omw::isUInteger(tokens[1])) { r = true; }
+    }
 
-        default:
-            r = "ERROR";
-            break;
+    return r;
+}
+
+bool schemeIsWinPhone(const omw::stringVector_t& tokens)
+{
+    bool r = false;
+
+    if (tokens.size() >= nTokensWinPhone)
+    {
+        if ((tokens[0] == "WP") && (tokens[1].length() == 8) && omw::isUInteger(tokens[1]) && (tokens[2].length() == 2) && omw::isUInteger(tokens[2]) &&
+            (tokens[3].length() == 2) && omw::isUInteger(tokens[3]) && (tokens[4].length() == 2) && omw::isUInteger(tokens[4]) && (tokens[5] == "Pro"))
+        {
+            r = true;
+        }
+    }
+
+    return r;
+}
+
+scheme_t detectScheme(const omw::stringVector_t& tokens)
+{
+    scheme_t r = SCHEME::unknown;
+
+    const bool huawai = schemeIsHuawai(tokens);
+    const bool samsung = schemeIsSamsung(tokens);
+    const bool wp = schemeIsWinPhone(tokens);
+
+    if (huawai && !samsung && !wp) r = SCHEME::huawai;
+    else if (!huawai && samsung && !wp) r = SCHEME::samsung;
+    else if (!huawai && !samsung && wp) r = SCHEME::winphone;
+    // else nop
+
+    return r;
+}
+
+// returns SCHEME::unknown if the rate is too small
+scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
+{
+    scheme_t r = SCHEME::unknown;
+
+    if (fs::exists(inDir))
+    {
+        std::vector<omw::string> stemFilenames;
+
+        for (const fs::directory_entry& entry : fs::directory_iterator(inDir))
+        {
+            if (entry.is_regular_file()) stemFilenames.push_back(entry.path().stem().u8string());
         }
 
-        return r;
-    }
-
-    constexpr size_t nTokensHuawai = 3;
-    constexpr size_t nTokensSamsung = 2;
-    constexpr size_t nTokensWinPhone = 6;
-    constexpr size_t nTokensMax = nTokensWinPhone;
-
-    bool schemeIsHuawai(const omw::stringVector_t& tokens)
-    {
-        bool r = false;
-
-        if (tokens.size() >= nTokensHuawai)
-        {
-            if (((tokens[0] == "IMG") || (tokens[0] == "VID") || (tokens[0] == "PANO")) &&
-                (tokens[1].length() == 8) && omw::isUInteger(tokens[1]) &&
-                (tokens[2].length() == 6) && omw::isUInteger(tokens[2]))
-            {
-                r = true;
-            }
-        }
-
-        return r;
-    }
-
-    bool schemeIsSamsung(const omw::stringVector_t& tokens)
-    {
-        bool r = false;
-
-        if (tokens.size() >= nTokensSamsung)
-        {
-            if ((tokens[0].length() == 8) && omw::isUInteger(tokens[0]) &&
-                (tokens[1].length() == 6) && omw::isUInteger(tokens[1]))
-            {
-                r = true;
-            }
-        }
-
-        return r;
-    }
-
-    bool schemeIsWinPhone(const omw::stringVector_t& tokens)
-    {
-        bool r = false;
-
-        if (tokens.size() >= nTokensWinPhone)
-        {
-            if ((tokens[0] == "WP") &&
-                (tokens[1].length() == 8) && omw::isUInteger(tokens[1]) &&
-                (tokens[2].length() == 2) && omw::isUInteger(tokens[2]) &&
-                (tokens[3].length() == 2) && omw::isUInteger(tokens[3]) &&
-                (tokens[4].length() == 2) && omw::isUInteger(tokens[4]) &&
-                (tokens[5] == "Pro"))
-            {
-                r = true;
-            }
-        }
-
-        return r;
-    }
-
-    scheme_t detectScheme(const omw::stringVector_t& tokens)
-    {
-        scheme_t r = SCHEME::unknown;
-
-        const bool huawai = schemeIsHuawai(tokens);
-        const bool samsung = schemeIsSamsung(tokens);
-        const bool wp = schemeIsWinPhone(tokens);
-
-        if (huawai && !samsung && !wp) r = SCHEME::huawai;
-        else if (!huawai && samsung && !wp) r = SCHEME::samsung;
-        else if (!huawai && !samsung && wp) r = SCHEME::winphone;
-        // else nop
-
-        return r;
-    }
-
-    // returns SCHEME::unknown if the rate is too small
-    scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
-    {
-        scheme_t r = SCHEME::unknown;
-
-        if (fs::exists(inDir))
-        {
-            std::vector<omw::string> stemFilenames;
-
-            for (const fs::directory_entry& entry : fs::directory_iterator(inDir))
-            {
-                if (entry.is_regular_file()) stemFilenames.push_back(entry.path().stem().u8string());
-            }
-
-            constexpr size_t k = 30;
-            size_t blockSize = stemFilenames.size() / k;
-            if ((blockSize == 0) || (stemFilenames.size() <= k)) blockSize = 1;
+        constexpr size_t k = 30;
+        size_t blockSize = stemFilenames.size() / k;
+        if ((blockSize == 0) || (stemFilenames.size() <= k)) blockSize = 1;
 
 #if defined(PRJ_DEBUG) && 0
-            cout << omw::fgBrightBlack << "@" << __FUNCTION__ << " blockSize: " << blockSize << ", stemFilenames.size(): " << stemFilenames.size() << omw::fgDefault << endl;
+        cout << omw::fgBrightBlack << "@" << __FUNCTION__ << " blockSize: " << blockSize << ", stemFilenames.size(): " << stemFilenames.size() << omw::fgDefault
+             << endl;
 #endif
 
-            std::vector<omw::string> analyze;
-            for (size_t i = 0; i < stemFilenames.size(); ++i)
-            {
-                if ((i % blockSize) == 0) analyze.push_back(stemFilenames[i]);
-            }
+        std::vector<omw::string> analyze;
+        for (size_t i = 0; i < stemFilenames.size(); ++i)
+        {
+            if ((i % blockSize) == 0) analyze.push_back(stemFilenames[i]);
+        }
 
-            stemFilenames.clear();
-            stemFilenames.shrink_to_fit();
+        stemFilenames.clear();
+        stemFilenames.shrink_to_fit();
 
-            size_t cnt_huawai = 0;
-            size_t cnt_samsung = 0;
-            size_t cnt_winphone = 0;
+        size_t cnt_huawai = 0;
+        size_t cnt_samsung = 0;
+        size_t cnt_winphone = 0;
 
-            for (size_t i = 0; i < analyze.size(); ++i)
-            {
-                const auto tokens = analyze[i].split(inFileDelimiter, nTokensMax + 1);
-                if (schemeIsHuawai(tokens)) ++cnt_huawai;
-                if (schemeIsSamsung(tokens)) ++cnt_samsung;
-                if (schemeIsWinPhone(tokens)) ++cnt_winphone;
-            }
+        for (size_t i = 0; i < analyze.size(); ++i)
+        {
+            const auto tokens = analyze[i].split(inFileDelimiter, nTokensMax + 1);
+            if (schemeIsHuawai(tokens)) ++cnt_huawai;
+            if (schemeIsSamsung(tokens)) ++cnt_samsung;
+            if (schemeIsWinPhone(tokens)) ++cnt_winphone;
+        }
 
-            std::array<size_t, 3> cnt = { cnt_huawai, cnt_samsung, cnt_winphone };
-            std::sort(cnt.begin(), cnt.end(), std::greater<size_t>());
+        std::array<size_t, 3> cnt = { cnt_huawai, cnt_samsung, cnt_winphone };
+        std::sort(cnt.begin(), cnt.end(), std::greater<size_t>());
 
-            const double rate = (double)(cnt[0]) / (double)(analyze.size());
-            if (pRate) *pRate = rate;
+        const double rate = (double)(cnt[0]) / (double)(analyze.size());
+        if (pRate) *pRate = rate;
 
-            if ((cnt[0] != cnt[1]) && (rate >= 0.75))
-            {
-                if (cnt[0] == cnt_huawai) r = SCHEME::huawai;
-                else if (cnt[0] == cnt_samsung) r = SCHEME::samsung;
-                else if (cnt[0] == cnt_winphone) r = SCHEME::winphone;
-                //else if (cnt[0] == cnt_) r = SCHEME::;
-                else
-                {
-                    r = SCHEME::unknown;
-                    // maybe print something
-                }
-            }
+        if ((cnt[0] != cnt[1]) && (rate >= 0.75))
+        {
+            if (cnt[0] == cnt_huawai) r = SCHEME::huawai;
+            else if (cnt[0] == cnt_samsung) r = SCHEME::samsung;
+            else if (cnt[0] == cnt_winphone) r = SCHEME::winphone;
+            // else if (cnt[0] == cnt_) r = SCHEME::;
             else
             {
                 r = SCHEME::unknown;
@@ -442,185 +420,186 @@ namespace
             r = SCHEME::unknown;
             // maybe print something
         }
-
-        if (pRate && (r == SCHEME::unknown)) *pRate = 1;
-
-        return r;
+    }
+    else
+    {
+        r = SCHEME::unknown;
+        // maybe print something
     }
 
-    constexpr char outFileDelimiter = '-';
-    constexpr char outFileDelimiter_opt = '_';
+    if (pRate && (r == SCHEME::unknown)) *pRate = 1;
 
-    // YYYYMMDD-hhmmss-NAME[_...]
-    std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& tokens, const std::string& inDirName)
+    return r;
+}
+
+constexpr char outFileDelimiter = '-';
+constexpr char outFileDelimiter_opt = '_';
+
+// YYYYMMDD-hhmmss-NAME[_...]
+std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& tokens, const std::string& inDirName)
+{
+    std::string r;
+    size_t nTokens;
+
+    switch (scheme)
     {
-        std::string r;
-        size_t nTokens;
+    case SCHEME::huawai:
+        r = tokens[1] + outFileDelimiter + tokens[2] + outFileDelimiter + inDirName;
+        nTokens = nTokensHuawai;
+        break;
 
-        switch (scheme)
-        {
-        case SCHEME::huawai:
-            r = tokens[1] + outFileDelimiter + tokens[2] + outFileDelimiter + inDirName;
-            nTokens = nTokensHuawai;
-            break;
+    case SCHEME::samsung:
+        r = tokens[0] + outFileDelimiter + tokens[1] + outFileDelimiter + inDirName;
+        nTokens = nTokensSamsung;
+        break;
 
-        case SCHEME::samsung:
-            r = tokens[0] + outFileDelimiter + tokens[1] + outFileDelimiter + inDirName;
-            nTokens = nTokensSamsung;
-            break;
+    case SCHEME::winphone:
+        r = tokens[1] + outFileDelimiter + tokens[2] + tokens[3] + tokens[4] + outFileDelimiter + inDirName + outFileDelimiter + tokens[0];
+        nTokens = nTokensWinPhone;
+        break;
 
-        case SCHEME::winphone:
-            r = tokens[1] + outFileDelimiter + tokens[2] + tokens[3] + tokens[4] + outFileDelimiter + inDirName + outFileDelimiter + tokens[0];
-            nTokens = nTokensWinPhone;
-            break;
-
-        default:
-            throw (int)(__LINE__);
-            break;
-        }
-
-        for (size_t i = nTokens; i < tokens.size(); ++i)
-        {
-            r += (outFileDelimiter_opt + tokens[i]);
-        }
-
-        return r;
+    default:
+        throw (int)(__LINE__);
+        break;
     }
 
-    util::FileCounter process(const scheme_t& scheme, const std::string& inDir, const std::string& inDirName, const std::string& outDir, const app::Flags& flags, util::ResultCounter& rcnt)
+    for (size_t i = nTokens; i < tokens.size(); ++i) { r += (outFileDelimiter_opt + tokens[i]); }
+
+    return r;
+}
+
+util::FileCounter process(const scheme_t& scheme, const std::string& inDir, const std::string& inDirName, const std::string& outDir, const app::Flags& flags,
+                          util::ResultCounter& rcnt)
+{
+    IMPLEMENT_FLAGS();
+
+    util::FileCounter rFileCnt;
+
+    if (scheme == SCHEME::unknown) throw (int)(__LINE__);
+
+    for (const fs::directory_entry& entry : fs::directory_iterator(inDir))
     {
-        IMPLEMENT_FLAGS();
-
-        util::FileCounter rFileCnt;
-
-        if (scheme == SCHEME::unknown) throw (int)(__LINE__);
-
-        for (const fs::directory_entry& entry : fs::directory_iterator(inDir))
+        if (entry.is_regular_file())
         {
-            if (entry.is_regular_file())
+            rFileCnt.addTotal();
+
+            const fs::path inFile = (fs::path(entry.path())).make_preferred();
+            auto ___inFileStemTokens = omw::split(inFile.stem().u8string(), inFileDelimiter);
+            const auto& inFileStemTokens = ___inFileStemTokens;
+
+            // Samsung multiple images in same second
+            if ((inFileStemTokens.size() >= nTokensSamsung) && inFileStemTokens[1].contains('(') && (inFileStemTokens[1].back() == ')'))
             {
-                rFileCnt.addTotal();
+                const auto samsungTimeTokens = inFileStemTokens[1].split('(');
+                const auto& timeToken = samsungTimeTokens[0];
+                const auto nToken = samsungTimeTokens[1].split(')')[0];
 
-                const fs::path inFile = (fs::path(entry.path())).make_preferred();
-                auto ___inFileStemTokens = omw::split(inFile.stem().u8string(), inFileDelimiter);
-                const auto& inFileStemTokens = ___inFileStemTokens;
-
-                // Samsung multiple images in same second
-                if ((inFileStemTokens.size() >= nTokensSamsung) && inFileStemTokens[1].contains('(') && (inFileStemTokens[1].back() == ')'))
+                if ((samsungTimeTokens.size() == 2) && omw::isUInteger(timeToken) && omw::isUInteger(nToken))
                 {
-                    const auto samsungTimeTokens = inFileStemTokens[1].split('(');
-                    const auto& timeToken = samsungTimeTokens[0];
-                    const auto nToken = samsungTimeTokens[1].split(')')[0];
-
-                    if ((samsungTimeTokens.size() == 2) && omw::isUInteger(timeToken) && omw::isUInteger(nToken))
-                    {
-                        ___inFileStemTokens[1] = timeToken;
-                        ___inFileStemTokens.insert(___inFileStemTokens.begin() + 2, nToken);
-                    }
+                    ___inFileStemTokens[1] = timeToken;
+                    ___inFileStemTokens.insert(___inFileStemTokens.begin() + 2, nToken);
                 }
+            }
 
-                if (scheme == detectScheme(inFileStemTokens))
-                {
-                    const auto outFileName = outFileStem(scheme, inFileStemTokens, inDirName) + inFile.extension().u8string();
-                    const fs::path outFile = outDir / fs::path(outFileName);
+            if (scheme == detectScheme(inFileStemTokens))
+            {
+                const auto outFileName = outFileStem(scheme, inFileStemTokens, inDirName) + inFile.extension().u8string();
+                const fs::path outFile = outDir / fs::path(outFileName);
 
 #if defined(PRJ_DEBUG) && 0
-                    printFormattedLine("###\"" + inFile.u8string() + "\" -> \"" + outFile.u8string() + "\"");
+                printFormattedLine("###\"" + inFile.u8string() + "\" -> \"" + outFile.u8string() + "\"");
 #endif
-                    const bool outFileExists = fs::exists(outFile);
-                    bool perform = true;
-                    fs::copy_options opt = fs::copy_options::none;
+                const bool outFileExists = fs::exists(outFile);
+                bool perform = true;
+                fs::copy_options opt = fs::copy_options::none;
 
-                    if (outFileExists && flags.force)
-                    {
-                        opt = fs::copy_options::overwrite_existing;
-                        if (verbose) WARNING_PRINT("###overwriting destination file \"" + outFile.u8string() + "\"");
-                    }
-                    else if (outFileExists && verbose)
-                    {
-                        printInfo("###destination file \"" + outFile.u8string() + "\" exists");
-                        if (cliChoice("overwrite destination file?") == 1) opt = fs::copy_options::overwrite_existing;
-                        else perform = false;
-                    }
-                    else if(outFileExists)
-                    {
-                        perform = false;
-                        ERROR_PRINT("###destination file \"" + outFile.u8string() + "\" exists");
-                    }
-
-                    if (perform)
-                    {
-                        std::error_code ec;
-                        const bool copied = fs::copy_file(inFile, outFile, opt, ec);
-
-                        if ((copied && !(ec.value() == 0)) ||
-                            (!copied && (ec.value() == 0)))
-                        {
-                            throw (int)(__LINE__);
-                        }
-
-                        if (copied) rFileCnt.addCopied();
-                        else
-                        {
-                            ERROR_PRINT("###failed to copy file \"" + inFile.u8string() + "\" to \"" + outFile.u8string() + "\"");
-                            if (verbose) printInfo(ec.message());
-                        }
-                    }
-                }
-                else
+                if (outFileExists && flags.force)
                 {
-                    ERROR_PRINT("###scheme mismatch on file \"" + inFile.u8string() + "\", file not copied");
+                    opt = fs::copy_options::overwrite_existing;
+                    if (verbose) WARNING_PRINT("###overwriting destination file \"" + outFile.u8string() + "\"");
+                }
+                else if (outFileExists && verbose)
+                {
+                    printInfo("###destination file \"" + outFile.u8string() + "\" exists");
+                    if (cliChoice("overwrite destination file?") == 1) opt = fs::copy_options::overwrite_existing;
+                    else perform = false;
+                }
+                else if (outFileExists)
+                {
+                    perform = false;
+                    ERROR_PRINT("###destination file \"" + outFile.u8string() + "\" exists");
+                }
 
-                    if (verbose)
+                if (perform)
+                {
+                    std::error_code ec;
+                    const bool copied = fs::copy_file(inFile, outFile, opt, ec);
+
+                    if ((copied && !(ec.value() == 0)) || (!copied && (ec.value() == 0))) { throw (int)(__LINE__); }
+
+                    if (copied) rFileCnt.addCopied();
+                    else
                     {
-                        std::string outFileName = inFile.stem().u8string() + outFileDelimiter + inDirName + inFile.extension().u8string();
-                        const fs::path outFile = (fs::path(outDir) / outFileName).make_preferred();
-
-                        printInfo();
-                        cout << "you may use: " << omw::fgBrightWhite;
-#if defined(OMW_PLAT_UNIX)
-                        cout << "cp";
-#elif defined(OMW_PLAT_WIN)
-                        cout << "copy";
-#else
-                        cout << "<COPY>";
-#endif // OMW_PLAT_x
-                        cout << " \"" + inFile.u8string() + "\" \"" + outFile.u8string() + "\"";
-                        cout << omw::fgDefault << endl;
+                        ERROR_PRINT("###failed to copy file \"" + inFile.u8string() + "\" to \"" + outFile.u8string() + "\"");
+                        if (verbose) printInfo(ec.message());
                     }
                 }
             }
-        }
+            else
+            {
+                ERROR_PRINT("###scheme mismatch on file \"" + inFile.u8string() + "\", file not copied");
 
-        return rFileCnt;
+                if (verbose)
+                {
+                    std::string outFileName = inFile.stem().u8string() + outFileDelimiter + inDirName + inFile.extension().u8string();
+                    const fs::path outFile = (fs::path(outDir) / outFileName).make_preferred();
+
+                    printInfo();
+                    cout << "you may use: " << omw::fgBrightWhite;
+#if defined(OMW_PLAT_UNIX)
+                    cout << "cp";
+#elif defined(OMW_PLAT_WIN)
+                    cout << "copy";
+#else
+                    cout << "<COPY>";
+#endif // OMW_PLAT_x
+                    cout << " \"" + inFile.u8string() + "\" \"" + outFile.u8string() + "\"";
+                    cout << omw::fgDefault << endl;
+                }
+            }
+        }
     }
+
+    return rFileCnt;
+}
 
 #if defined(PRJ_DEBUG)
-    void dbg_rm_outDir(const std::string& outDir)
+void dbg_rm_outDir(const std::string& outDir)
+{
+    try
     {
-        try
-        {
-            const auto n = fs::remove_all(outDir);
-            cout << omw::fgBrightBlack << "rm OUTDIR: " << n << " items deleted" << omw::fgDefault << endl;
-        }
-        catch (const std::filesystem::filesystem_error& ex)
-        {
-            cout << omw::fgBrightMagenta << __FUNCTION__ << omw::fgDefault << endl;
-            throw ex;
-        }
-        catch (const std::system_error& ex)
-        {
-            cout << omw::fgBrightMagenta << __FUNCTION__ << omw::fgDefault << endl;
-            throw ex;
-        }
-        catch (const std::exception& ex)
-        {
-            cout << omw::fgBrightMagenta << __FUNCTION__ << omw::fgDefault << endl;
-            throw ex;
-        }
+        const auto n = fs::remove_all(outDir);
+        cout << omw::fgBrightBlack << "rm OUTDIR: " << n << " items deleted" << omw::fgDefault << endl;
     }
-#endif
+    catch (const std::filesystem::filesystem_error& ex)
+    {
+        cout << omw::fgBrightMagenta << __FUNCTION__ << omw::fgDefault << endl;
+        throw ex;
+    }
+    catch (const std::system_error& ex)
+    {
+        cout << omw::fgBrightMagenta << __FUNCTION__ << omw::fgDefault << endl;
+        throw ex;
+    }
+    catch (const std::exception& ex)
+    {
+        cout << omw::fgBrightMagenta << __FUNCTION__ << omw::fgDefault << endl;
+        throw ex;
+    }
 }
+#endif
+
+} // namespace
 
 
 
@@ -706,7 +685,12 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             if (fs::directory_entry(inDir).is_directory())
             {
                 scheme = detectScheme(inDir, &rate);
-                if (!quiet) printFormattedLine("###\"" + (fs::path(inDir)).make_preferred().u8string() + "\" " + toString(scheme) + (scheme == SCHEME::unknown ? "" : " (" + std::to_string((int)round(rate * 100)) + "%)"));
+
+                if (!quiet)
+                {
+                    printFormattedLine("###\"" + (fs::path(inDir)).make_preferred().u8string() + "\" " + toString(scheme) +
+                                       (scheme == SCHEME::unknown ? "" : " (" + std::to_string((int)round(rate * 100)) + "%)"));
+                }
 
                 if (scheme != SCHEME::unknown)
                 {
@@ -720,7 +704,12 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
                             {
                                 usedInDirNames.push_back(inDirName);
                                 const auto tmpFileCnt = ::process(scheme, inDir, inDirName, outDir, flags, rcnt);
-                                if (verbose) printInfo("###copied @" + std::to_string(tmpFileCnt.copied()) + "/" + std::to_string(tmpFileCnt.total()) + "@ files");
+
+                                if (verbose)
+                                {
+                                    printInfo("###copied @" + std::to_string(tmpFileCnt.copied()) + "/" + std::to_string(tmpFileCnt.total()) + "@ files");
+                                }
+
                                 fileCnt.add(tmpFileCnt);
                             }
                             else ERROR_PRINT("INDIR name was already used, no files copied");
@@ -770,18 +759,17 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
 
             cout << " ========" << endl;
 
-            //if (verbose) printFormattedLine("###copied @" + std::to_string(fileCnt.copied()) + "/" + std::to_string(fileCnt.total()) + "@ files");
+            // if (verbose) printFormattedLine("###copied @" + std::to_string(fileCnt.copied()) + "/" + std::to_string(fileCnt.total()) + "@ files");
             if (verbose) printFormattedLine("copied " + std::to_string(fileCnt.copied()) + "/" + std::to_string(fileCnt.total()) + " files");
         }
 
-        if (((nSucceeded == inDirs.size()) && (rcnt.errors() != 0)) ||
-            ((nSucceeded != inDirs.size()) && (rcnt.errors() == 0)))
+        if (((nSucceeded == inDirs.size()) && (rcnt.errors() != 0)) || ((nSucceeded != inDirs.size()) && (rcnt.errors() == 0)))
         {
             r = EC_OK;
             throw (int)(__LINE__);
         }
 
-        //if (verbose) cout << "\n" << omw::fgBrightGreen << "done" << omw::defaultForeColor << endl;
+        // if (verbose) cout << "\n" << omw::fgBrightGreen << "done" << omw::defaultForeColor << endl;
 
         if (nSucceeded != inDirs.size()) r = EC_ERROR;
     }
