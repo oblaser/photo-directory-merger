@@ -502,7 +502,7 @@ namespace
                 rFileCnt.addTotal();
 
                 const fs::path inFile = (fs::path(entry.path())).make_preferred();
-                auto ___inFileStemTokens = omw_::split(inFile.stem().u8string(), inFileDelimiter);
+                auto ___inFileStemTokens = omw::split(inFile.stem().u8string(), inFileDelimiter);
                 const auto& inFileStemTokens = ___inFileStemTokens;
 
                 // Samsung multiple images in same second

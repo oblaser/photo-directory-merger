@@ -14,4 +14,3 @@
 
 - `build/dep_vstr.txt`
 - `src/project.h`
-- CMake DEBUG define

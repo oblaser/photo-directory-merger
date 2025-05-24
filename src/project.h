@@ -13,25 +13,18 @@ copyright       GNU GPLv3 - Copyright (c) 2022 Oliver Blaser
 
 namespace prj
 {
-    const char* const appDirName_windows = "phodime";
-    const char* const appDirName_unix = "phodime";
-
-#ifdef OMW_PLAT_WIN
-    const char* const appDirName = appDirName_windows;
-#else
-    const char* const appDirName = appDirName_unix;
-#endif
-
     const char* const appName = "Photo Directory Merger";
     const char* const exeName = "phodime"; // eq to the linker setting
+    const char* const dirName = "phodime";
 
     const char* const website = "https://github.com/oblaser/photo-directory-merger";
 
-    const omw::Version version(1, 0, 2, "alpha");
+    const omw::Version version(1, 0, 2, "alpha.1");
+    constexpr int copyrightYear = 2025;
 }
 
 
-#ifdef OMW_DEBUG
+#ifdef _DEBUG
 #define PRJ_DEBUG (1)
 #else
 #undef PRJ_DEBUG

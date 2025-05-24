@@ -68,7 +68,7 @@ namespace
         cout << endl;
         cout << "project page: " << prj::website << endl;
         cout << endl;
-        cout << "Copyright (c) 2023 Oliver Blaser." << endl;
+        cout << "Copyright (c) " << prj::copyrightYear << " Oliver Blaser." << endl;
         cout << "License: GNU GPLv3 <http://gnu.org/licenses/>." << endl;
         cout << "This is free software. There is NO WARRANTY." << endl;
     }

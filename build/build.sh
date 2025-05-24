@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # author        Oliver Blaser
-# date          11.02.2023
-# copyright     GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
+# date          03.11.2024
+# copyright     MIT - Copyright (c) 2024 Oliver Blaser
 
 # Usage:
 # ./build.sh --help
@@ -34,9 +34,11 @@ function printHelp()
     echo "  -h help     print help"
     echo "  cleanAll    delete all but CMakeLists.txt"
     echo "  cmake       cmake ."
+    echo "  cmaked      cmake -D_DEBUG ."
     echo "  make        make"
     echo "  clean       make clean"
     echo "  run         execute"
+    echo "  srun        execute with sudo"
 }
 
 function copy_bin()
@@ -48,10 +50,10 @@ function copy_bin()
     #
     ## the source file to copy is the target file in the CMakeLists.txt
     #
-    #cp ./cmake/librpihal-shared.so ../lib/lib${prjBinName}.so.$versionstr
+    #cp ./cmake/lib${prjBinName}-shared.so ../lib/lib${prjBinName}.so.$versionstr
     #procErrorCode $?
     #
-    #cp ./cmake/librpihal-static.a ../lib/lib${prjBinName}.a
+    #cp ./cmake/lib${prjBinName}-static.a ../lib/lib${prjBinName}.a
     #procErrorCode $?
     #
     #cd ../lib
@@ -66,6 +68,12 @@ function copy_bin()
 
 function cmd_cmake_clean()
 {
+    # clean potentially built libraries in submodules (ignore failure)
+    cd ./$cmakeDirName
+    make clean
+    if [ $? -ne 0 ]; then echo -e "(weak warning) \033[93mfailed to clean with make\033[39m"; fi;
+    cd ..
+
     rm -rf $cmakeDirName/CMakeFiles/
     procErrorCode $?
 
@@ -98,6 +106,16 @@ function cmd_cmake()
     procErrorCode $?
 }
 
+function cmd_cmaked()
+{
+    cd ./$cmakeDirName
+    procErrorCode $?
+    cmake -D_DEBUG=1 .
+    procErrorCode $?
+    cd ..
+    procErrorCode $?
+}
+
 function cmd_make()
 {
     cd ./$cmakeDirName
@@ -112,9 +130,6 @@ function cmd_make()
 
 function cmd_clean()
 {
-    rm -rf ../../rpihal/lib
-    procErrorCode $?
-    
     cd ./$cmakeDirName
     procErrorCode $?
     make clean
@@ -129,6 +144,7 @@ function procArg()
     
     if [ "$1" == "cleanAll" ]; then cmd_cmake_clean
     elif [ "$1" == "cmake" ]; then cmd_cmake
+    elif [ "$1" == "cmaked" ]; then cmd_cmaked
     elif [ "$1" == "make" ]; then cmd_make
     elif [ "$1" == "clean" ]; then cmd_clean
     elif [ "$1" == "run" ]
@@ -136,6 +152,15 @@ function procArg()
         cd ./$cmakeDirName
         procErrorCode $?
         ./$exeName
+        procErrorCode $?
+        cd ..
+        procErrorCode $?
+        
+    elif [ "$1" == "srun" ]
+    then
+        cd ./$cmakeDirName
+        procErrorCode $?
+        sudo ./$exeName
         procErrorCode $?
         cd ..
         procErrorCode $?

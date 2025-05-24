@@ -63,24 +63,10 @@ namespace util
 #include <omw/string.h>
 namespace omw_
 {
-#if (OMW_VERSION_ID <= /*OMW_VERSION_ID_0_2_1_ALPHA_1*/ 3)
+#if (OMW_VERSION_ID <= 250501)
 
-#if OMW_CPPSTD >= OMW_CPPSTD_20
-#define OMW_CONSTEXPR_ON_STDSTRING constexpr
-#else
-#define OMW_CONSTEXPR_ON_STDSTRING 
-#endif
-
-    OMW_CONSTEXPR_ON_STDSTRING std::string rmLeadingZeros(const std::string& str);
+    OMW_STDSTRING_CONSTEXPR std::string rmLeadingZeros(const std::string& str);
     void rmLeadingZeros(std::string& str);
-
-    inline OMW_CONSTEXPR_ON_STDSTRING bool contains(const std::string& str, char ch) { return (str.find(ch) != std::string::npos); }
-    inline OMW_CONSTEXPR_ON_STDSTRING bool contains(const std::string& str, const char* s) { return (str.find(s) != std::string::npos); }
-    inline OMW_CONSTEXPR_ON_STDSTRING bool contains(const std::string& str, const std::string& s) { return (str.find(s) != std::string::npos); }
-    inline OMW_CONSTEXPR_ON_STDSTRING bool contains(const std::string& str, const std::string_view& sv) { return (str.find(sv) != std::string::npos); }
-
-    omw::stringVector_t split(const std::string& str, char delimiter, omw::stringVector_t::size_type maxTokenCount = omw::stringVector_npos);
-    omw::stringVector_t splitLen(const std::string& str, omw::string::size_type tokenLength, omw::stringVector_t::size_type maxTokenCount = omw::stringVector_npos);
 
 #endif // OMW_VERSION_ID
 }
