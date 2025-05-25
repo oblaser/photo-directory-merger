@@ -48,6 +48,7 @@ jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
 
     const uint8_t* p = buffer;
     const uint8_t* const end = buffer + sizeof(buffer);
+    size_t segmentIdx = 0;
 
     while (p < end)
     {
@@ -58,7 +59,7 @@ jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
         const jpeg::SegmentInfo info(p, end - p);
 
 #if PRJ_DEBUG && LOG_PRINT_SEGMENTS
-        if ((info.type() == SegmentType::APP0))
+        if ((info.type() == SegmentType::APP1))
         {
             if (p > buffer) { printf("\n"); }
 
@@ -71,7 +72,7 @@ jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
             {
                 const size_t s = ((info.size() == SIZE_MAX) ? 128 : (2 + info.size())); // segment size
                 const size_t d = sizeof(buffer) - (size_t)(p - buffer);                 // remaining data size
-                const size_t pretty = 1024;
+                const size_t pretty = ((info.type() == SegmentType::APP1) ? 1024 : 512);
 
                 size_t n = s;
                 if (n > d) { n = d; }
@@ -88,16 +89,42 @@ jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
             const jpeg::App0Segment segment(p, end - p);
 
 #if PRJ_DEBUG && LOG_PRINT_SEGMENTS
-            printf("JFIF v%s, thumbnail: %ix%i, %s\n", segment.jfifVersion().toString().c_str(), (int)segment.thumbnailWidth(), (int)segment.thumbnailHeight(),
+            std::string versionString = segment.jfifVersion().toString();
+            if (!segment.jfifVersion().isValid()) { versionString += "(invalid)"; }
+
+            printf("JFIF v%s, thumbnail: %ix%i, %s\n", versionString.c_str(), (int)segment.thumbnailWidth(), (int)segment.thumbnailHeight(),
                    (segment.isValid() ? "valid" : "invalid"));
 #endif // LOG_PRINT_SEGMENTS
         }
+        else if (info.type() == SegmentType::APP1) { const jpeg::App1Segment segment(p, end - p); }
 
 
+
+        ++segmentIdx;
         p += 2 + info.size();
 
         if (info.type() == jpeg::SegmentType::SOS) { break; }
     }
+
+
+
+#if PRJ_DEBUG && 0
+    {
+        printf("\n\n\n");
+
+        auto test = [](uint8_t maj, uint8_t min) {
+            const jpeg::exif::Version v(maj, min);
+            printf("%02x %02x -> %s, semver: %s\n", (int)maj, (int)min, v.toString().c_str(), v.toSemverString().c_str());
+        };
+
+        test(1, 0x02);
+        test(1, 0x20);
+        test(1, 0x21);
+        test(1, 0x03);
+
+        printf("\n\n\n");
+    }
+#endif // PRJ_DEBUG
 
 
 

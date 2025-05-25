@@ -12,6 +12,7 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 #include <string>
 #include <vector>
 
+#include <omw/version.h>
 
 namespace jpeg {
 
@@ -39,6 +40,39 @@ private:
     int32_t m_major;
     int32_t m_minor;
 };
+
+namespace exif {
+
+    class Version
+    {
+    public:
+        Version()
+            : m_semver(-1, -1, -1)
+        {}
+
+        Version(int32_t major, int32_t minor_revision);
+
+        virtual ~Version() {}
+
+        int major() const { return m_semver.major(); }
+        int minor() const { return m_semver.minor(); }
+        int revision() const { return m_semver.patch(); }
+
+        int compare(const jpeg::exif::Version& b) const { return m_semver.compare((omw::Version)b); }
+        int compare(const omw::Version& b) const { return m_semver.compare(b); }
+
+        std::string toString() const;
+        std::string toSemverString() const { return m_semver.toString(); }
+
+        bool isValid() const { return m_semver.isValid(); }
+
+        explicit operator omw::Version() const { return m_semver; }
+
+    private:
+        omw::Version m_semver;
+    };
+
+} // namespace exif
 
 enum class SegmentType
 {
@@ -177,10 +211,21 @@ private:
 };
 
 class App1Segment : public Segment
-{};
+{
+public:
+    App1Segment() = delete;
 
-class App2Segment : public Segment
-{};
+    App1Segment(const uint8_t* data, size_t count)
+        : Segment(data, count)
+    {
+        if (m_info.isApp0Segment()) { m_parse(data, count); }
+    }
+
+    virtual ~App1Segment() {}
+
+private:
+    void m_parse(const uint8_t* data, size_t count);
+};
 
 
 

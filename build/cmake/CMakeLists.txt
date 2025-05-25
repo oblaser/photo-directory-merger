@@ -39,6 +39,7 @@ set(SOURCES
 ../../src/application/processor.cpp
 ../../src/middleware/jpeg/metadata.cpp
 ../../src/middleware/jpeg/parser.cpp
+../../src/middleware/jpeg/tiff-parser.cpp
 ../../src/middleware/util.cpp
 ../../src/main.cpp
 )

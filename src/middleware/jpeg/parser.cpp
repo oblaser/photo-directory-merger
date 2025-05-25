@@ -6,8 +6,10 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 #include "middleware/jpeg/marker.h"
+#include "middleware/jpeg/tiff-parser.h"
 #include "parser.h"
 
 #include <omw/encoding.h>
@@ -32,6 +34,8 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 
 std::string jpeg::Version::toString() const
 {
+#warning "is this JFIF version parsing ok?"
+
     std::string str = std::to_string(m_major) + '.';
 
     if (m_minor < 10) { str += '0'; }
@@ -39,6 +43,46 @@ std::string jpeg::Version::toString() const
 
     return str;
 }
+
+
+
+#if 0
+jpeg::exif::Version::Version(int32_t major, int32_t minor_revision)
+    : m_semver(-1, -1, -1)
+{
+    if ((major >= 0) && (minor_revision >= 0))
+    {
+#warning "is this Exif version parsing ok?"
+#if 1
+        int32_t minor = minor_revision;
+        int32_t revision = 0;
+
+        if (minor_revision > 9)
+        {
+            minor = minor_revision / 10;
+            revision = minor_revision - 10 * minor;
+        }
+#else
+        const int32_t minor = ((minor_revision & 0xF0) >> 4);
+        const int32_t revision = (minor_revision & 0x0F);
+#endif
+
+        m_semver.set(major, minor, revision);
+    }
+}
+
+std::string jpeg::exif::Version::toString() const
+{
+    std::string str = std::to_string(major());
+
+    str += '.';
+
+    str += std::to_string(minor());
+    if (revision() > 0) { str += std::to_string(revision()); }
+
+    return str;
+}
+#endif
 
 
 
@@ -105,7 +149,7 @@ void jpeg::App0Segment::m_parse(const uint8_t* data, size_t count)
         n = (size_t)m_thumbnailWidth * (size_t)m_thumbnailHeight;
     }
 
-    if (count >= specSize(n))
+    if ((count >= specSize(n)) && (count == m_info.segmentSize()))
     {
         // uncompressed 24bit RGB thumbnail image data
         // data[18] is R0
@@ -134,6 +178,30 @@ void jpeg::App0Segment::m_parse(const uint8_t* data, size_t count)
     else { m_validity = false; }
 }
 
+void jpeg::App1Segment::m_parse(const uint8_t* data, size_t count)
+{
+    // clamp byte count to segment size
+    if (m_info.segmentSize() < count) { count = m_info.segmentSize(); }
+
+
+
+    std::string identifier;
+
+    if ((count >= 10) && (data[8] == 0) && (data[9] == 0)) { identifier = (const char*)data + 4; }
+
+    if ((count == m_info.segmentSize()) && (identifier == "Exif"))
+    {
+        tiff::File tiff;
+
+        if (tiff.parse(data + 10, count - 10) < 0) { printf("\033[91mTIFF parser error\033[39m\n"); }
+
+        // version
+        // make
+        // model
+        // datetime original
+    }
+    else { m_validity = false; }
+}
 
 
 std::string jpeg::toString(const SegmentType& segmentType)
