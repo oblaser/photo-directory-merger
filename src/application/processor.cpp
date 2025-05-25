@@ -573,7 +573,7 @@ util::FileCounter process(const scheme_t& scheme, const std::string& inDir, cons
 
                 const fs::path outFile = outDir / fs::path(outFileName);
 
-                if (scheme == SCHEME::iPhone) { jpeg::analyseAndPrintMeta(inFile); }
+                if (scheme == SCHEME::iPhone) { jpeg::readMetadata(inFile); }
 
 #if defined(PRJ_DEBUG) && 0
                 printFormattedLine("###\"" + inFile.u8string() + "\" -> \"" + outFile.u8string() + "\"");

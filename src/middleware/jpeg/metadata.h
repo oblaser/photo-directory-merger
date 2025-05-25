@@ -23,10 +23,6 @@ public:
 
 Metadata readMetadata(const std::filesystem::path& filePath);
 
-#ifdef _DEBUG
-void analyseAndPrintMeta(const std::filesystem::path& filePath);
-#endif
-
 } // namespace jpeg
 
 
