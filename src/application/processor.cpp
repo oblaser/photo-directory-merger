@@ -15,6 +15,7 @@ copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 #include <string>
 #include <vector>
 
+#include "middleware/jpeg/metadata.h"
 #include "middleware/util.h"
 #include "processor.h"
 #include "project.h"
@@ -84,6 +85,8 @@ enum ERRORCODE // https://tldp.org/LDP/abs/html/exitcodes.html / on MSW are no p
 };
 static_assert(EC__end_ <= EC__max_, "too many error codes defined");
 
+
+
 //
 // "### normal "quoted bright" white"
 // "### normal @just bright@ white"
@@ -149,7 +152,8 @@ void printFormattedLine(const std::string& text)
     cout << endl;
 }
 
-constexpr int ewiWidth = 10;
+static constexpr int ewiWidth = 10;
+
 void printError(const std::string& text)
 {
     cout << omw::fgBrightRed << std::left << std::setw(ewiWidth) << "error:" << omw::defaultForeColor;
@@ -179,6 +183,7 @@ void printTitle(const std::string& title)
 
 
 #pragma region library
+
 int cliChoice(const std::string& q, int def = 0, char first = 'y', char second = 'n')
 {
     int r = 0;
@@ -214,6 +219,7 @@ omw::string to_string(uint64_t val, int base, const char* digits)
 
     return r;
 }
+
 #pragma endregion
 
 
@@ -480,7 +486,7 @@ omw::stringVector_t iPhoneOutFileTokens(const fs::path& inFilePath)
 {
     const omw::stringVector_t tokens =
 #if PRJ_DEBUG
-        { "YYYYMMDD", "hhmmss" };
+        { "YYYYMMDD", "hhmmss_" + std::to_string(rand()) };
 #endif
 #warning "TODO"
 
@@ -567,7 +573,9 @@ util::FileCounter process(const scheme_t& scheme, const std::string& inDir, cons
 
                 const fs::path outFile = outDir / fs::path(outFileName);
 
-#if defined(PRJ_DEBUG) && 1
+                if (scheme == SCHEME::iPhone) { jpeg::analyseAndPrintMeta(inFile); }
+
+#if defined(PRJ_DEBUG) && 0
                 printFormattedLine("###\"" + inFile.u8string() + "\" -> \"" + outFile.u8string() + "\"");
 #endif
                 const bool outFileExists = fs::exists(outFile);

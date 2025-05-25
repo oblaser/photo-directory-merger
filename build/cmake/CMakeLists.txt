@@ -37,6 +37,8 @@ include_directories(../../src/)
 set(SOURCES
 ../../src/application/cliarg.cpp
 ../../src/application/processor.cpp
+../../src/middleware/jpeg/metadata.cpp
+../../src/middleware/jpeg/parser.cpp
 ../../src/middleware/util.cpp
 ../../src/main.cpp
 )

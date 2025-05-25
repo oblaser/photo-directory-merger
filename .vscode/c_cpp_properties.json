@@ -4,10 +4,7 @@
             "name": "IntelliSense helper",
             "includePath": [
                 "${workspaceFolder}/src",
-                "${workspaceFolder}/sdk/curl-thread/include",
-                "${workspaceFolder}/sdk/nlohmann/include",
                 "${workspaceFolder}/sdk/omw/include",
-                "${sdk}/curl/x86/include"
             ],
             "defines": [
                 //"__unix__",
