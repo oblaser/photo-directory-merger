@@ -253,9 +253,10 @@ constexpr char inFileDelimiter = '_';
 typedef enum SCHEME
 {
     unknown = 0,
-    huawai,  // IMG_YYYYMMDD_hhmmss
-    samsung, // YYYYMMDD_hhmmss
-    winphone // WP_YYYYMMDD_hh_mm_ss_Pro
+    huawai,   // IMG_YYYYMMDD_hhmmss
+    iPhone,   // img-nnnn-uid / IMG_nnnn (old)
+    samsung,  // YYYYMMDD_hhmmss
+    winPhone, // WP_YYYYMMDD_hh_mm_ss_Pro
 } scheme_t;
 
 omw::string toString(const scheme_t& scheme)
@@ -272,12 +273,16 @@ omw::string toString(const scheme_t& scheme)
         r = "Huawai";
         break;
 
+    case SCHEME::iPhone:
+        r = "iPhone";
+        break;
+
     case SCHEME::samsung:
         r = "Samsung";
         break;
 
-    case SCHEME::winphone:
-        r = "Winphone";
+    case SCHEME::winPhone:
+        r = "Windows Phone";
         break;
 
     default:
@@ -289,6 +294,8 @@ omw::string toString(const scheme_t& scheme)
 }
 
 constexpr size_t nTokensHuawai = 3;
+constexpr size_t nTokensIPhone_old = 2;
+constexpr size_t nTokensIPhone = 3;
 constexpr size_t nTokensSamsung = 2;
 constexpr size_t nTokensWinPhone = 6;
 constexpr size_t nTokensMax = nTokensWinPhone;
@@ -304,6 +311,24 @@ bool schemeIsHuawai(const omw::stringVector_t& tokens)
         {
             r = true;
         }
+    }
+
+    return r;
+}
+
+bool schemeIsIPhone(const omw::stringVector_t& tokens)
+{
+    bool r = false;
+
+    if ((tokens.size() == nTokensIPhone_old) && (tokens[0] == "IMG") && omw::isUInteger(tokens[1])) { r = true; }
+    else if (tokens.size() == 1)
+    {
+        auto tmp = omw::split(tokens[0], '-');
+
+        // remove potential leading space
+        if (tmp[0].front() == 0x20) { tmp[0].erase(0, 1); }
+
+        if ((tmp.size() == 3) && (tmp[0] == "img") && omw::isUInteger(tmp[1]) && omw::isHex(tmp[2])) { r = true; }
     }
 
     return r;
@@ -341,14 +366,27 @@ scheme_t detectScheme(const omw::stringVector_t& tokens)
 {
     scheme_t r = SCHEME::unknown;
 
-    const bool huawai = schemeIsHuawai(tokens);
-    const bool samsung = schemeIsSamsung(tokens);
-    const bool wp = schemeIsWinPhone(tokens);
+    constexpr uint32_t huawai = 0x00000010;
+    constexpr uint32_t iPhone = 0x00001000;
+    constexpr uint32_t samsung = 0x00100000;
+    constexpr uint32_t winPhone = 0x10000000;
 
-    if (huawai && !samsung && !wp) r = SCHEME::huawai;
-    else if (!huawai && samsung && !wp) r = SCHEME::samsung;
-    else if (!huawai && !samsung && wp) r = SCHEME::winphone;
+    uint32_t mask = 0;
+
+    if (schemeIsHuawai(tokens)) { mask |= huawai; }
+    if (schemeIsIPhone(tokens)) { mask |= iPhone; }
+    if (schemeIsSamsung(tokens)) { mask |= samsung; }
+    if (schemeIsWinPhone(tokens)) { mask |= winPhone; }
+
+
+
+    if (mask == huawai) { r = SCHEME::huawai; }
+    else if (mask == iPhone) { r = SCHEME::iPhone; }
+    else if (mask == samsung) { r = SCHEME::samsung; }
+    else if (mask == winPhone) { r = SCHEME::winPhone; }
     // else nop
+
+
 
     return r;
 }
@@ -364,12 +402,12 @@ scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
 
         for (const fs::directory_entry& entry : fs::directory_iterator(inDir))
         {
-            if (entry.is_regular_file()) stemFilenames.push_back(entry.path().stem().u8string());
+            if (entry.is_regular_file()) { stemFilenames.push_back(entry.path().stem().u8string()); }
         }
 
         constexpr size_t k = 30;
         size_t blockSize = stemFilenames.size() / k;
-        if ((blockSize == 0) || (stemFilenames.size() <= k)) blockSize = 1;
+        if ((blockSize == 0) || (stemFilenames.size() <= k)) { blockSize = 1; }
 
 #if defined(PRJ_DEBUG) && 0
         cout << omw::fgBrightBlack << "@" << __FUNCTION__ << " blockSize: " << blockSize << ", stemFilenames.size(): " << stemFilenames.size() << omw::fgDefault
@@ -379,35 +417,38 @@ scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
         std::vector<omw::string> analyze;
         for (size_t i = 0; i < stemFilenames.size(); ++i)
         {
-            if ((i % blockSize) == 0) analyze.push_back(stemFilenames[i]);
+            if ((i % blockSize) == 0) { analyze.push_back(stemFilenames[i]); }
         }
 
         stemFilenames.clear();
         stemFilenames.shrink_to_fit();
 
         size_t cnt_huawai = 0;
+        size_t cnt_iPhone = 0;
         size_t cnt_samsung = 0;
-        size_t cnt_winphone = 0;
+        size_t cnt_winPhone = 0;
 
         for (size_t i = 0; i < analyze.size(); ++i)
         {
             const auto tokens = analyze[i].split(inFileDelimiter, nTokensMax + 1);
-            if (schemeIsHuawai(tokens)) ++cnt_huawai;
-            if (schemeIsSamsung(tokens)) ++cnt_samsung;
-            if (schemeIsWinPhone(tokens)) ++cnt_winphone;
+            if (schemeIsHuawai(tokens)) { ++cnt_huawai; }
+            if (schemeIsIPhone(tokens)) { ++cnt_iPhone; }
+            if (schemeIsSamsung(tokens)) { ++cnt_samsung; }
+            if (schemeIsWinPhone(tokens)) { ++cnt_winPhone; }
         }
 
-        std::array<size_t, 3> cnt = { cnt_huawai, cnt_samsung, cnt_winphone };
+        std::array<size_t, 4> cnt = { cnt_huawai, cnt_iPhone, cnt_samsung, cnt_winPhone };
         std::sort(cnt.begin(), cnt.end(), std::greater<size_t>());
 
         const double rate = (double)(cnt[0]) / (double)(analyze.size());
-        if (pRate) *pRate = rate;
+        if (pRate) { *pRate = rate; }
 
         if ((cnt[0] != cnt[1]) && (rate >= 0.75))
         {
-            if (cnt[0] == cnt_huawai) r = SCHEME::huawai;
-            else if (cnt[0] == cnt_samsung) r = SCHEME::samsung;
-            else if (cnt[0] == cnt_winphone) r = SCHEME::winphone;
+            if (cnt[0] == cnt_huawai) { r = SCHEME::huawai; }
+            else if (cnt[0] == cnt_iPhone) { r = SCHEME::iPhone; }
+            else if (cnt[0] == cnt_samsung) { r = SCHEME::samsung; }
+            else if (cnt[0] == cnt_winPhone) { r = SCHEME::winPhone; }
             // else if (cnt[0] == cnt_) r = SCHEME::;
             else
             {
@@ -427,13 +468,24 @@ scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
         // maybe print something
     }
 
-    if (pRate && (r == SCHEME::unknown)) *pRate = 1;
+    if (pRate && (r == SCHEME::unknown)) { *pRate = 1; }
 
     return r;
 }
 
 constexpr char outFileDelimiter = '-';
 constexpr char outFileDelimiter_opt = '_';
+
+omw::stringVector_t iPhoneOutFileTokens(const fs::path& inFilePath)
+{
+    const omw::stringVector_t tokens =
+#if PRJ_DEBUG
+        { "YYYYMMDD", "hhmmss" };
+#endif
+#warning "TODO"
+
+    return tokens;
+}
 
 // YYYYMMDD-hhmmss-NAME[_...]
 std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& tokens, const std::string& inDirName)
@@ -448,12 +500,17 @@ std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& token
         nTokens = nTokensHuawai;
         break;
 
+    case SCHEME::iPhone:
+        r = tokens[0] + outFileDelimiter + tokens[1] + outFileDelimiter + inDirName;
+        nTokens = SIZE_MAX;
+        break;
+
     case SCHEME::samsung:
         r = tokens[0] + outFileDelimiter + tokens[1] + outFileDelimiter + inDirName;
         nTokens = nTokensSamsung;
         break;
 
-    case SCHEME::winphone:
+    case SCHEME::winPhone:
         r = tokens[1] + outFileDelimiter + tokens[2] + tokens[3] + tokens[4] + outFileDelimiter + inDirName + outFileDelimiter + tokens[0];
         nTokens = nTokensWinPhone;
         break;
@@ -503,10 +560,14 @@ util::FileCounter process(const scheme_t& scheme, const std::string& inDir, cons
 
             if (scheme == detectScheme(inFileStemTokens))
             {
-                const auto outFileName = outFileStem(scheme, inFileStemTokens, inDirName) + inFile.extension().u8string();
+                const auto tmp_outFileStem = outFileStem(scheme, ((scheme == SCHEME::iPhone) ? (iPhoneOutFileTokens(inFile)) : inFileStemTokens), inDirName);
+                const auto tmp_outFileExtension = inFile.extension().u8string();
+
+                const auto outFileName = tmp_outFileStem + tmp_outFileExtension;
+
                 const fs::path outFile = outDir / fs::path(outFileName);
 
-#if defined(PRJ_DEBUG) && 0
+#if defined(PRJ_DEBUG) && 1
                 printFormattedLine("###\"" + inFile.u8string() + "\" -> \"" + outFile.u8string() + "\"");
 #endif
                 const bool outFileExists = fs::exists(outFile);
@@ -680,7 +741,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             const auto nErrorsOld = rcnt.errors();
             const auto& inDir = inDirs[i_inDir];
 
-            if (verbose && (i_inDir > 0)) cout << endl;
+            if (verbose && (i_inDir > 0)) { cout << endl; }
 
             if (fs::directory_entry(inDir).is_directory())
             {
@@ -722,7 +783,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
             }
             else
             {
-                if (!quiet) printFormattedLine("###\"" + inDir + "\"");
+                if (!quiet) { printFormattedLine("###\"" + inDir + "\""); }
                 ERROR_PRINT("INDIR is not a directory");
             }
 

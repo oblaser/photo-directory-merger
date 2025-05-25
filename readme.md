@@ -1,8 +1,8 @@
 # Photo Directory Merger
 
 Detects the naming scheme of the photos in subdirectories (ideally named by the
-photographer's name), extracts the date and time from the filename, and copies
-the photos in an output directory. The destination files are all named with the
+photographer's name), extracts the date and time from the filename or metadata, and copies
+the photos to an output directory. The destination files are all named with the
 same date and time format and the name of the source directory.
 
 The result is an output directory with chronological sorted photos, including
