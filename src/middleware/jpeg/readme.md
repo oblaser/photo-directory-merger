@@ -13,14 +13,15 @@
 | `EOI`         | end of image                                                  |
 
 ### EXIF
-| Segment  |                                                               |
-|:---------|:--------------------------------------------------------------|
-| `SOI`    | start of image                                                |
-| `APP1`   |                                                               |
-| [`APP2`] | optional extension segment                                    |
-| ...      | optional additional segments, in any order: `SOF`, `DHT`, ... |
-| `SOS`    | start of scan                                                              |
-| `EOI`    | end of image                                                  |
+| Segment                      |                            |
+|:-----------------------------|:---------------------------|
+| `SOI`                        | start of image             |
+| `APP1`                       |                            |
+| [`APP2`]                     | optional extension segment |
+| [`APPn`]                     | optional extension segments |
+| `DQT`, `DHT`, [`DRI`], `SOF` | may be in any order        |
+| `SOS`                        | start of scan              |
+| `EOI`                        | end of image               |
 
 
 
@@ -31,3 +32,6 @@
 ### EXIF
 - https://www.cipa.jp/std/documents/e/DC-008-2012_E.pdf
 - https://stackoverflow.com/questions/1821515/how-is-exif-info-encoded
+
+### TIFF
+- https://www.itu.int/itudoc/itu-t/com16/tiff-fx/docs/tiff6.pdf

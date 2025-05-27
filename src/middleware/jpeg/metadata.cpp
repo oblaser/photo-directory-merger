@@ -59,7 +59,7 @@ jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
         const jpeg::SegmentInfo info(p, end - p);
 
 #if PRJ_DEBUG && LOG_PRINT_SEGMENTS
-        if ((info.type() == SegmentType::APP1))
+        if ((info.type() == SegmentType::APP1) && 0)
         {
             if (p > buffer) { printf("\n"); }
 
@@ -96,7 +96,20 @@ jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
                    (segment.isValid() ? "valid" : "invalid"));
 #endif // LOG_PRINT_SEGMENTS
         }
-        else if (info.type() == SegmentType::APP1) { const jpeg::App1Segment segment(p, end - p); }
+        else if (info.type() == SegmentType::APP1)
+        {
+            const jpeg::App1Segment segment(p, end - p);
+
+#if PRJ_DEBUG && LOG_PRINT_SEGMENTS
+            printf("APP1 %i\n", (int)segment.isValid());
+            util::hexDump(p, 16);
+
+            printf("TIFF:\n");
+            const size_t count = end - p - 10;
+            constexpr size_t pretty = 512;
+            util::hexDump(p + 10, (count < pretty ? count : pretty));
+#endif // LOG_PRINT_SEGMENTS
+        }
 
 
 

@@ -15,20 +15,7 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 #include <omw/encoding.h>
 
 
-
-#define JPEG_EXIF_TAG_VERSION          (0x9000)
-#define JPEG_EXIF_TAG_MAKE             (0x010F)
-#define JPEG_EXIF_TAG_MODEL            (0x0110)
-#define JPEG_EXIF_TAG_ORIENTATION      (0x0112)
-#define JPEG_EXIF_TAG_DATETIMEORIG     (0x9003)
-#define JPEG_EXIF_TAG_FNUMBER          (0x829D)
-#define JPEG_EXIF_TAG_EXPOSURETIME     (0x829A)
-#define JPEG_EXIF_TAG_ISOSPEED         (0x8833)
-#define JPEG_EXIF_TAG_METERINGMODE     (0x9207)
-#define JPEG_EXIF_TAG_ARTIST           (0x013B)
-#define JPEG_EXIF_TAG_COPYRIGHT        (0x8298)
-#define JPEG_EXIF_TAG_USERCOMMENT      (0x9286)
-#define JPEG_EXIF_TAG_IMAGEDESCRIPTION (0x010E)
+#define LOG_EN (1)
 
 
 
@@ -183,22 +170,59 @@ void jpeg::App1Segment::m_parse(const uint8_t* data, size_t count)
     // clamp byte count to segment size
     if (m_info.segmentSize() < count) { count = m_info.segmentSize(); }
 
+    constexpr size_t headerSize = 10;
+    const uint8_t* const tiffData = data + headerSize;
+    const size_t tiffSize = count - headerSize;
+
 
 
     std::string identifier;
 
-    if ((count >= 10) && (data[8] == 0) && (data[9] == 0)) { identifier = (const char*)data + 4; }
+    if ((count >= headerSize) && (data[8] == 0) && (data[9] == 0)) { identifier = (const char*)data + 4; }
 
-    if ((count == m_info.segmentSize()) && (identifier == "Exif"))
+    if (/*(count == m_info.segmentSize()) && */ (identifier == "Exif")) // try to extreact as much TIFF data as possible
     {
         tiff::File tiff;
 
-        if (tiff.parse(data + 10, count - 10) < 0) { printf("\033[91mTIFF parser error\033[39m\n"); }
+        if (tiff.parse(tiffData, tiffSize) < 0)
+        {
+            m_validity = false;
 
-        // version
-        // make
-        // model
-        // datetime original
+            printf("\033[91mTIFF parser error\033[39m\n");
+        }
+        else
+        {
+            m_validity = true;
+
+            for (size_t dirIdx = 0; dirIdx < tiff.directories().size(); ++dirIdx)
+            {
+                const auto& dir = tiff.directories()[dirIdx];
+
+#if defined(_DEBUG) && LOG_EN
+                printf("IFD%zu %i tags", dirIdx, (int)dir.tagCount());
+                if (dir.tags().size() < dir.tagCount()) { printf(" \033[93m(parsed only %zu)\033[39m", dir.tags().size()); }
+                printf("\n");
+#endif
+
+                for (size_t tagIdx = 0; tagIdx < dir.tags().size(); ++tagIdx)
+                {
+                    const auto& tag = dir.tags()[tagIdx];
+
+#if defined(_DEBUG) && LOG_EN
+                    if (tag.id() == tiff::ID_MAKE) { printf("make: %s\n", tag.data().data()); }
+                    else if (tag.id() == tiff::ID_MODEL) { printf("model: %s\n", tag.data().data()); }
+                    else if (tag.id() == tiff::ID_DATETIME) { printf("changed: %s\n", tag.data().data()); }
+                    else if (tag.id() == tiff::ID_DATETIMEORIGINAL) { printf("original: %s\n", tag.data().data()); }
+                    else if (tag.id() == tiff::ID_DATETIMEDIGITIZED) { printf("digitized: %s\n", tag.data().data()); }
+#endif
+                }
+            }
+
+            // version
+            // make
+            // model
+            // datetime original
+        }
     }
     else { m_validity = false; }
 }

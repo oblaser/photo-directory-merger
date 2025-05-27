@@ -218,7 +218,7 @@ public:
     App1Segment(const uint8_t* data, size_t count)
         : Segment(data, count)
     {
-        if (m_info.isApp0Segment()) { m_parse(data, count); }
+        if (m_info.type() == SegmentType::APP1) { m_parse(data, count); }
     }
 
     virtual ~App1Segment() {}
