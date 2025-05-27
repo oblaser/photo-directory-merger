@@ -28,7 +28,11 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 
 
 
-uint16_t tiff::Common::m_decode16(const uint8_t* data) const
+bool tiff::isNestedIfd(uint16_t tagId) { return ((tagId == ID_SUBIFD) || (tagId == ID_EXIFIFD) || (tagId == ID_GPSIFD) || (tagId == ID_EXIFINTEROPIFD)); }
+
+
+
+uint16_t tiff::Encoding::m_decode16(const uint8_t* data) const
 {
     uint16_t r = 0;
 
@@ -54,7 +58,7 @@ uint16_t tiff::Common::m_decode16(const uint8_t* data) const
     return r;
 }
 
-uint32_t tiff::Common::m_decode32(const uint8_t* data) const
+uint32_t tiff::Encoding::m_decode32(const uint8_t* data) const
 {
     uint32_t r = 0;
 
@@ -88,7 +92,7 @@ uint32_t tiff::Common::m_decode32(const uint8_t* data) const
     return r;
 }
 
-uint64_t tiff::Common::m_decode64(const uint8_t* data) const
+uint64_t tiff::Encoding::m_decode64(const uint8_t* data) const
 {
     uint64_t r = 0;
 
@@ -136,6 +140,43 @@ uint64_t tiff::Common::m_decode64(const uint8_t* data) const
     }
 
     return r;
+}
+
+
+
+int tiff::DirectoryContainer::m_parseIfds(const uint8_t* data, size_t count, uint32_t offs)
+{
+    int cntTags = 0;
+
+    if (offs != 0)
+    {
+        Directory ifd(this->byteOrder());
+
+        do {
+            if (offs >= count)
+            {
+                LOG_ERR_PARSE_OUTOFRANGE("IFD", offs);
+                m_validity = false;
+                break;
+            }
+
+            const int res = ifd.parse(data, count, offs);
+
+#if defined(_DEBUG) && LOG_EN
+            printf("IFD 0x%04x, next: 0x%04x, res: %i\n", offs, ifd.next(), res);
+#endif
+
+            if (res > 0) { cntTags += res; }
+            if (!ifd.isValid()) { m_validity = false; }
+
+            m_directories.push_back(ifd);
+
+            offs = ifd.next();
+        }
+        while (offs);
+    }
+
+    return cntTags;
 }
 
 
@@ -201,7 +242,7 @@ int tiff::Tag::parse(const uint8_t* data, size_t count, uint32_t offs)
     m_valueCount = m_decode32(data + offs + 4);
     m_value = m_decode32(data + offs + 8);
 
-    if (0 == sizeOfType(m_valueType))
+    if (0 == tiff::Tag::sizeOfType(m_valueType))
     {
 #if defined(_DEBUG) && LOG_EN
         printf("\033[91mcan't parse tag with unknown value type 0x%04x\033[39m\n", (int)m_valueType);
@@ -214,13 +255,13 @@ int tiff::Tag::parse(const uint8_t* data, size_t count, uint32_t offs)
     size_t n;
     size_t valueOffs;
 
-    if (valueIsOffset())
+    if (this->valueIsOffset())
     {
         valueOffs = m_value; // value holds the data pointer/offset
 
         if (valueOffs < count)
         {
-            n = m_valueCount * sizeOfType(m_valueType);
+            n = m_valueCount * tiff::Tag::sizeOfType(m_valueType);
 
             if ((count - valueOffs) < n)
             {
@@ -246,12 +287,23 @@ int tiff::Tag::parse(const uint8_t* data, size_t count, uint32_t offs)
         n = 4;
     }
 
-    const uint8_t* const begin = data + valueOffs;
-    const uint8_t* const end = begin + n;
-    m_data.assign(begin, end);
-    const int nBytesRead = (int)n;
+    int cntTags = 0;
 
-    return nBytesRead;
+    if (this->isDirectory())
+    {
+        m_validity = true;
+        cntTags = m_parseIfds(data, count, valueOffs);
+    }
+    else
+    {
+        const uint8_t* const begin = data + valueOffs;
+        const uint8_t* const end = begin + n;
+        m_data.assign(begin, end);
+
+        cntTags = 1;
+    }
+
+    return cntTags;
 }
 
 void tiff::Tag::clear()
@@ -272,6 +324,8 @@ void tiff::Tag::clear()
 int tiff::Directory::parse(const uint8_t* data, size_t count, uint32_t offs)
 {
     this->clear();
+
+    m_offs = offs;
 
     if ((count - offs) < 2)
     {
@@ -307,7 +361,7 @@ int tiff::Directory::parse(const uint8_t* data, size_t count, uint32_t offs)
             printf("tag 0x%04x, ID: 0x%04x, value: 0x%08x %u, res: %i\n", tagOffs, tag.id(), tag.value(), tag.value(), res);
 #endif
 
-            if (res > 0) { ++cntTags; }
+            if (res > 0) { cntTags += res; }
             if (!tag.isValid()) { m_validity = false; }
 
             m_tags.push_back(tag);
@@ -324,6 +378,7 @@ void tiff::Directory::clear()
 {
     m_validity = false;
 
+    m_offs = 0;
     m_tagCount = 0;
     m_next = 0;
 
@@ -346,48 +401,13 @@ int tiff::File::parse(const uint8_t* data, size_t count)
 
     if (0x002A != m_decode16(data + 2)) { return (-1); } // TIFF marker 0x002A = 42
 
-    uint32_t offs = m_decode32(data + 4);
-
     m_validity = true;
-
-
-
-    int cntTags = 0;
-
-    if (offs != 0)
-    {
-        Directory ifd(this->byteOrder());
-
-        do {
-            if (offs >= count)
-            {
-                LOG_ERR_PARSE_OUTOFRANGE("IFD", offs);
-                m_validity = false;
-                break;
-            }
-
-            const int res = ifd.parse(data, count, offs);
-
-#if defined(_DEBUG) && LOG_EN
-            printf("IFD 0x%04x, next: 0x%04x, res: %i\n", offs, ifd.next(), res);
-#endif
-
-            if (res > 0) { cntTags += res; }
-            if (!ifd.isValid()) { m_validity = false; }
-
-            m_directories.push_back(ifd);
-
-            offs = ifd.next();
-        }
-        while (offs);
-    }
-
-    return cntTags;
+    return m_parseIfds(data, count, m_decode32(data + 4));
 }
 
 void tiff::File::clear()
 {
     m_validity = false;
 
-    m_directories.clear();
+    m_clearDirectories();
 }

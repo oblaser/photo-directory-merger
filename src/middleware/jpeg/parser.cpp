@@ -18,6 +18,13 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 #define LOG_EN (1)
 
 
+#if defined(_DEBUG) && LOG_EN
+#define LOG_TAG(_tag, _format, ...) printf(_format "%s\n", __VA_ARGS__, ((_tag).isValid() ? "" : " \033[31m(invalid tag)\033[39m"))
+#else
+#define LOG_TAG(...) (void)0
+#endif
+
+
 
 std::string jpeg::Version::toString() const
 {
@@ -184,47 +191,52 @@ void jpeg::App1Segment::m_parse(const uint8_t* data, size_t count)
     {
         tiff::File tiff;
 
-        if (tiff.parse(tiffData, tiffSize) < 0)
+        const int res = tiff.parse(tiffData, tiffSize);
+        if (res < 0)
         {
             m_validity = false;
-
             printf("\033[91mTIFF parser error\033[39m\n");
         }
         else
         {
-            m_validity = true;
-
-            for (size_t dirIdx = 0; dirIdx < tiff.directories().size(); ++dirIdx)
-            {
-                const auto& dir = tiff.directories()[dirIdx];
+            m_validity = true; // `tiff.isValid()` may be false if not the whole metadata section of the fle has been
+                               // read, which doesn't matter in this application
 
 #if defined(_DEBUG) && LOG_EN
-                printf("IFD%zu %i tags", dirIdx, (int)dir.tagCount());
-                if (dir.tags().size() < dir.tagCount()) { printf(" \033[93m(parsed only %zu)\033[39m", dir.tags().size()); }
-                printf("\n");
+            printf("parsed %i tags\n", res);
 #endif
 
-                for (size_t tagIdx = 0; tagIdx < dir.tags().size(); ++tagIdx)
-                {
-                    const auto& tag = dir.tags()[tagIdx];
-
-#if defined(_DEBUG) && LOG_EN
-                    if (tag.id() == tiff::ID_MAKE) { printf("make: %s\n", tag.data().data()); }
-                    else if (tag.id() == tiff::ID_MODEL) { printf("model: %s\n", tag.data().data()); }
-                    else if (tag.id() == tiff::ID_DATETIME) { printf("changed: %s\n", tag.data().data()); }
-                    else if (tag.id() == tiff::ID_DATETIMEORIGINAL) { printf("original: %s\n", tag.data().data()); }
-                    else if (tag.id() == tiff::ID_DATETIMEDIGITIZED) { printf("digitized: %s\n", tag.data().data()); }
-#endif
-                }
-            }
-
-            // version
-            // make
-            // model
-            // datetime original
+            m_scanTiffIfds(tiff.directories());
         }
     }
     else { m_validity = false; }
+}
+
+void jpeg::App1Segment::m_scanTiffIfds(const std::vector<tiff::Directory>& directories)
+{
+    for (size_t dirIdx = 0; dirIdx < directories.size(); ++dirIdx)
+    {
+        const auto& dir = directories[dirIdx];
+
+#if defined(_DEBUG) && LOG_EN
+        printf("IFD @%08x has %i tags", dir.offs(), (int)dir.tagCount());
+        if (dir.tags().size() < dir.tagCount()) { printf(" \033[93m(parsed only %zu)\033[39m", dir.tags().size()); }
+        printf("%s\n", (dir.isValid() ? "" : " \033[31m(invalid IFD)\033[39m"));
+#endif
+
+        for (size_t tagIdx = 0; tagIdx < dir.tags().size(); ++tagIdx)
+        {
+            const auto& tag = dir.tags()[tagIdx];
+
+            if (tag.isDirectory()) { m_scanTiffIfds(tag.directories()); }
+            else if (tag.id() == tiff::ID_MAKE) { LOG_TAG(tag, "make %s", tag.data().data()); }
+            else if (tag.id() == tiff::ID_MODEL) { LOG_TAG(tag, "model: %s", tag.data().data()); }
+            else if (tag.id() == tiff::ID_DATETIME) { LOG_TAG(tag, "changed: %s", tag.data().data()); }
+            else if (tag.id() == tiff::ID_DATETIMEORIGINAL) { LOG_TAG(tag, "original: %s", tag.data().data()); }
+            else if (tag.id() == tiff::ID_DATETIMEDIGITIZED) { LOG_TAG(tag, "digitized: %s", tag.data().data()); }
+            else if (tag.id() == tiff::ID_SOFTWARE) { LOG_TAG(tag, "software: %s", tag.data().data()); }
+        }
+    }
 }
 
 

@@ -12,7 +12,10 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 #include <string>
 #include <vector>
 
+#include "middleware/jpeg/tiff-parser.h"
+
 #include <omw/version.h>
+
 
 namespace jpeg {
 
@@ -225,6 +228,7 @@ public:
 
 private:
     void m_parse(const uint8_t* data, size_t count);
+    void m_scanTiffIfds(const std::vector<tiff::Directory>& directories);
 };
 
 

@@ -35,6 +35,8 @@ enum TAG_ID : uint16_t
     ID_DATETIMEDIGITIZED = 0x9004, // of digital data generation
 };
 
+bool isNestedIfd(uint16_t tagId);
+
 enum VALUE_TYPE : uint16_t
 {
     TYPE_BYTE = 0x0001,      // unsigned 8bit
@@ -60,24 +62,20 @@ enum class ByteOrder
     le, // little endian, Intel
 };
 
-class Common
+class Encoding
 {
 public:
-    Common()
+    Encoding()
         : m_byteOrder(ByteOrder::undefined)
     {}
 
-    explicit Common(ByteOrder byteOrder)
+    Encoding(const ByteOrder& byteOrder)
         : m_byteOrder(byteOrder)
     {}
 
-    virtual ~Common() {}
-
-    virtual void clear() = 0;
+    virtual ~Encoding() {}
 
     const ByteOrder& byteOrder() const { return m_byteOrder; }
-
-    virtual bool isValid() const = 0;
 
 protected:
     void m_setByteOrder(const ByteOrder& byteOrder) { m_byteOrder = byteOrder; }
@@ -90,7 +88,45 @@ private:
     ByteOrder m_byteOrder;
 };
 
-class Tag : public Common
+class Common
+{
+public:
+    Common() {}
+    virtual ~Common() {}
+
+    virtual void clear() = 0;
+    virtual bool isValid() const = 0;
+};
+
+class Directory;
+
+class DirectoryContainer : public Encoding
+{
+public:
+    DirectoryContainer()
+        : Encoding(), m_validity(false), m_directories()
+    {}
+
+    explicit DirectoryContainer(const ByteOrder& byteOrder)
+        : Encoding(byteOrder), m_validity(false), m_directories()
+    {}
+
+    virtual ~DirectoryContainer() {}
+
+    const std::vector<Directory>& directories() const { return m_directories; }
+
+protected:
+    bool m_validity;
+
+    int m_parseIfds(const uint8_t* data, size_t count, uint32_t offs);
+    void m_clearDirectories() { m_directories.clear(); }
+
+private:
+    std::vector<Directory> m_directories;
+};
+
+class Tag : public Common,
+            public DirectoryContainer
 {
 public:
     static size_t sizeOfType(uint16_t valueType);
@@ -100,25 +136,19 @@ public:
     Tag() = delete;
 
     explicit Tag(ByteOrder byteOrder)
-        : Common(byteOrder), m_validity(false), m_id(), m_valueType(), m_valueCount(), m_value(), m_data()
+        : Common(), DirectoryContainer(byteOrder), m_id(), m_valueType(), m_valueCount(), m_value(), m_data()
     {
         this->clear();
     }
 
     Tag(const uint8_t* data, size_t count, uint32_t offs, ByteOrder byteOrder)
-        : Common(byteOrder), m_validity(false), m_id(), m_valueType(), m_valueCount(), m_value(), m_data()
+        : Common(), DirectoryContainer(byteOrder), m_id(), m_valueType(), m_valueCount(), m_value(), m_data()
     {
         parse(data, count, offs);
     }
 
     virtual ~Tag() {}
 
-    /**
-     * Returns the number of read bytes even if not all could have been read from `data`.
-     * In this case the validity is set to false.
-     *
-     * @return Number of read value bytes on success, -1 on error
-     */
     int parse(const uint8_t* data, size_t count, uint32_t offs);
 
     virtual void clear();
@@ -131,10 +161,9 @@ public:
 
     bool valueIsOffset() const { return valueIsOffset(m_id, m_valueType, m_valueCount); }
 
-    virtual bool isValid() const { return m_validity; }
+    bool isDirectory() const { return tiff::isNestedIfd(m_id); }
 
-protected:
-    bool m_validity;
+    virtual bool isValid() const { return m_validity; }
 
 private:
     uint16_t m_id;
@@ -144,19 +173,20 @@ private:
     std::vector<uint8_t> m_data;
 };
 
-class Directory : public Common
+class Directory : public Common,
+                  public Encoding
 {
 public:
     Directory() = delete;
 
     explicit Directory(ByteOrder byteOrder)
-        : Common(byteOrder), m_validity(false), m_tagCount(), m_next(), m_tags()
+        : Common(), Encoding(byteOrder), m_validity(false), m_offs(0), m_tagCount(), m_next(), m_tags()
     {
         this->clear();
     }
 
     Directory(const uint8_t* data, size_t count, uint32_t offs, ByteOrder byteOrder)
-        : Common(byteOrder), m_validity(false), m_tagCount(), m_next(), m_tags()
+        : Common(), Encoding(byteOrder), m_validity(false), m_offs(0), m_tagCount(), m_next(), m_tags()
     {
         parse(data, count, offs);
     }
@@ -167,6 +197,7 @@ public:
 
     virtual void clear();
 
+    uint32_t offs() const { return m_offs; }
     uint16_t tagCount() const { return m_tagCount; }
     uint32_t next() const { return m_next; }
     const std::vector<Tag>& tags() const { return m_tags; }
@@ -177,22 +208,24 @@ protected:
     bool m_validity;
 
 private:
+    uint32_t m_offs;
     uint16_t m_tagCount;
     uint32_t m_next;
     std::vector<Tag> m_tags;
 };
 
-class File : public Common
+class File : public Common,
+             public DirectoryContainer
 {
 public:
     File()
-        : Common(), m_validity(false), m_directories()
+        : Common(), DirectoryContainer()
     {
         this->clear();
     }
 
     File(const uint8_t* data, size_t count)
-        : Common(), m_validity(false), m_directories()
+        : Common(), DirectoryContainer()
     {
         parse(data, count);
     }
@@ -211,13 +244,7 @@ public:
 
     virtual void clear();
 
-    const std::vector<Directory>& directories() const { return m_directories; }
-
     virtual bool isValid() const { return m_validity; }
-
-protected:
-    bool m_validity;
-    std::vector<Directory> m_directories;
 };
 
 } // namespace tiff

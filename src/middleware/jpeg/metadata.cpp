@@ -27,7 +27,11 @@ namespace fs = std::filesystem;
 
 jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
 {
+#if PRJ_DEBUG && 0
+    uint8_t buffer[300];
+#else
     uint8_t buffer[64 * 1024];
+#endif
 
     std::fstream ifs;
 
@@ -100,7 +104,7 @@ jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
         {
             const jpeg::App1Segment segment(p, end - p);
 
-#if PRJ_DEBUG && LOG_PRINT_SEGMENTS
+#if PRJ_DEBUG && LOG_PRINT_SEGMENTS && 0
             printf("APP1 %i\n", (int)segment.isValid());
             util::hexDump(p, 16);
 
