@@ -2,6 +2,11 @@
 
 
 
+### v1.1.1
+- 
+
+
+
 ### v1.1.0
 - Added iPhone support
 - Added PANO_* files in Huawai scheme
