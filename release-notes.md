@@ -3,9 +3,9 @@
 
 
 ### v1.1.0
+- Added iPhone support
 - Added PANO_* files in Huawai scheme
 - Detect Samsung multiple images in same second
-- Added iPhone support
 
 
 

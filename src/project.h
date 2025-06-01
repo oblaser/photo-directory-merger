@@ -19,7 +19,7 @@ const char* const dirName = "phodime";
 
 const char* const website = "https://github.com/oblaser/photo-directory-merger";
 
-const omw::Version version(1, 1, 0, "alpha");
+const omw::Version version(1, 1, 0, "");
 constexpr int copyrightYear = 2025;
 
 }
