@@ -9,6 +9,7 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -153,7 +154,7 @@ public:
 
     const SegmentInfo& info() const { return m_info; }
 
-    bool isValid() const { return m_validity; }
+    virtual bool isValid() const { return m_validity; }
 
 protected:
     SegmentInfo m_info;
@@ -219,14 +220,22 @@ public:
     App1Segment() = delete;
 
     App1Segment(const uint8_t* data, size_t count)
-        : Segment(data, count)
+        : Segment(data, count), m_tChanged(0), m_tDigitized(0), m_tOriginal(0)
     {
         if (m_info.type() == SegmentType::APP1) { m_parse(data, count); }
     }
 
     virtual ~App1Segment() {}
 
+    time_t tChanged() const { return m_tChanged; }
+    time_t tDigitized() const { return m_tDigitized; }
+    time_t tOriginal() const { return m_tOriginal; }
+
 private:
+    time_t m_tChanged;
+    time_t m_tDigitized;
+    time_t m_tOriginal;
+
     void m_parse(const uint8_t* data, size_t count);
     void m_scanTiffIfds(const std::vector<tiff::Directory>& directories);
 };

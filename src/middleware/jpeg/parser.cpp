@@ -6,6 +6,7 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
 #include <string>
 
 #include "middleware/jpeg/marker.h"
@@ -13,9 +14,10 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 #include "parser.h"
 
 #include <omw/encoding.h>
+#include <omw/string.h>
 
 
-#define LOG_EN (1)
+#define LOG_EN (0)
 
 
 #if defined(_DEBUG) && LOG_EN
@@ -26,6 +28,11 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 
 
 
+static int tiffToCTime(const char* str, time_t* t);
+
+
+
+#if 0
 std::string jpeg::Version::toString() const
 {
 #warning "is this JFIF version parsing ok?"
@@ -37,6 +44,7 @@ std::string jpeg::Version::toString() const
 
     return str;
 }
+#endif
 
 
 
@@ -231,13 +239,32 @@ void jpeg::App1Segment::m_scanTiffIfds(const std::vector<tiff::Directory>& direc
             if (tag.isDirectory()) { m_scanTiffIfds(tag.directories()); }
             else if (tag.id() == tiff::ID_MAKE) { LOG_TAG(tag, "make %s", tag.data().data()); }
             else if (tag.id() == tiff::ID_MODEL) { LOG_TAG(tag, "model: %s", tag.data().data()); }
-            else if (tag.id() == tiff::ID_DATETIME) { LOG_TAG(tag, "changed: %s", tag.data().data()); }
-            else if (tag.id() == tiff::ID_DATETIMEORIGINAL) { LOG_TAG(tag, "original: %s", tag.data().data()); }
-            else if (tag.id() == tiff::ID_DATETIMEDIGITIZED) { LOG_TAG(tag, "digitized: %s", tag.data().data()); }
+            else if (tag.id() == tiff::ID_DATETIME)
+            {
+                LOG_TAG(tag, "changed: %s", tag.data().data());
+
+                const int err = tiffToCTime((const char*)(tag.data().data()), &m_tChanged);
+                if (err) { m_tChanged = (-1); }
+            }
+            else if (tag.id() == tiff::ID_DATETIMEORIGINAL)
+            {
+                LOG_TAG(tag, "original: %s", tag.data().data());
+
+                const int err = tiffToCTime((const char*)(tag.data().data()), &m_tOriginal);
+                if (err) { m_tOriginal = INT32_MIN; }
+            }
+            else if (tag.id() == tiff::ID_DATETIMEDIGITIZED)
+            {
+                LOG_TAG(tag, "digitized: %s", tag.data().data());
+
+                const int err = tiffToCTime((const char*)(tag.data().data()), &m_tDigitized);
+                if (err) { m_tDigitized = (-410227200); }
+            }
             else if (tag.id() == tiff::ID_SOFTWARE) { LOG_TAG(tag, "software: %s", tag.data().data()); }
         }
     }
 }
+
 
 
 std::string jpeg::toString(const SegmentType& segmentType)
@@ -304,4 +331,44 @@ std::string jpeg::toString(const SegmentType& segmentType)
     }
 
     return str;
+}
+
+
+
+int tiffToCTime(const char* str, time_t* t)
+{
+    // "YYYY:MM:DD hh:mm:ss"
+    if (!((str[4] == ':') && (str[7] == ':') && (str[10] == 0x20) && (str[13] == ':') && (str[16] == ':') && (str[19] == 0))) { return (-1); }
+
+    const std::string year(str + 0, str + 4);
+    const std::string month(str + 5, str + 7);
+    const std::string day(str + 8, str + 10);
+    const std::string hour(str + 11, str + 13);
+    const std::string minute(str + 14, str + 16);
+    const std::string second(str + 17, str + 19);
+
+    if (!(omw::isUInteger(year) && omw::isUInteger(month) && omw::isUInteger(day) && omw::isUInteger(hour) && omw::isUInteger(minute) &&
+          omw::isUInteger(second)))
+    {
+        return (-1);
+    }
+
+    if (t)
+    {
+        std::tm tm = {
+            .tm_sec = std::stoi(second),
+            .tm_min = std::stoi(minute),
+            .tm_hour = std::stoi(hour),
+            .tm_mday = std::stoi(day),
+            .tm_mon = std::stoi(month) - 1,
+            .tm_year = std::stoi(year) - 1900,
+            .tm_wday = 0,
+            .tm_yday = 0,
+            .tm_isdst = -1,
+        };
+
+        *t = std::mktime(&tm);
+    }
+
+    return 0;
 }

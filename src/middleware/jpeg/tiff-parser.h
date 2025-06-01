@@ -16,7 +16,6 @@ namespace tiff {
 
 enum TAG_ID : uint16_t
 {
-
     ID_MAKE = 0x010F,
     ID_MODEL = 0x0110,
     ID_SOFTWARE = 0x0131,

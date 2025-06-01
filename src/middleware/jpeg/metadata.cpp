@@ -6,6 +6,7 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 
@@ -18,40 +19,51 @@ copyright       GPL-3.0 - Copyright (c) 2025 Oliver Blaser
 #include <omw/encoding.h>
 
 
-#define LOG_PRINT_SEGMENTS (1)
+#define LOG_PRINT_SEGMENTS (0)
 
 
 namespace fs = std::filesystem;
 
 
 
-jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
+std::string jpeg::DateTime::toStringIso8601(time_t t)
 {
-#if PRJ_DEBUG && 0
-    uint8_t buffer[300];
-#else
-    uint8_t buffer[64 * 1024];
-#endif
+    std::string r;
 
-    std::fstream ifs;
+    constexpr size_t bufferSize = 50;
+    char buffer[bufferSize];
 
-    ifs.exceptions(std::ios::badbit | std::ios::failbit);
-    ifs.open(filePath, std::ios::in | std::ios::binary);
+    const struct std::tm* tm = std::localtime(&t);
 
-    ifs.exceptions(std::ios::badbit);
-    ifs.read((char*)buffer, sizeof(buffer));
+    if (tm && (std::strftime(buffer, bufferSize, "%FT%T", tm) > 0)) { r = std::string(buffer); }
+    else { r = '[' + std::to_string(t) + ']'; }
 
-    ifs.exceptions(std::ios::badbit | std::ios::failbit);
-    ifs.close();
+    return r;
+}
 
-#if PRJ_DEBUG && LOG_PRINT_SEGMENTS
-    printf("\n\n%s\n", filePath.u8string().c_str());
-#endif
+std::string jpeg::DateTime::toStringPhodime(time_t t)
+{
+    std::string r;
+
+    constexpr size_t bufferSize = 50;
+    char buffer[bufferSize];
+
+    const struct std::tm* tm = std::localtime(&t);
+
+    static_assert(app::outFileDelimiter == '-', "adapt format string below");
+
+    if (tm && (std::strftime(buffer, bufferSize, "%Y%m%d-%H%M%S", tm) > 0)) { r = std::string(buffer); }
+    else { r = '[' + std::to_string(t) + ']'; }
+
+    return r;
+}
 
 
 
-    const uint8_t* p = buffer;
-    const uint8_t* const end = buffer + sizeof(buffer);
+void jpeg::Metadata::m_parse(const uint8_t* data, size_t count)
+{
+    const uint8_t* p = data;
+    const uint8_t* const end = data + count;
     size_t segmentIdx = 0;
 
     while (p < end)
@@ -104,14 +116,24 @@ jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
         {
             const jpeg::App1Segment segment(p, end - p);
 
-#if PRJ_DEBUG && LOG_PRINT_SEGMENTS && 0
-            printf("APP1 %i\n", (int)segment.isValid());
+            m_tChanged = segment.tChanged();
+            m_tDigitized = segment.tDigitized();
+            m_tOriginal = segment.tOriginal();
+
+#if PRJ_DEBUG && LOG_PRINT_SEGMENTS
+            const std::string tChangedStr = DateTime::toStringIso8601(segment.tChanged());
+            const std::string tOriginalStr = DateTime::toStringIso8601(segment.tOriginal());
+            const std::string tDigitizedStr = DateTime::toStringIso8601(segment.tDigitized());
+            printf("APP1 %s\n  c %s\n  o %s\n  d %s\n", (segment.isValid() ? "valid" : "invalid"), tChangedStr.c_str(), tOriginalStr.c_str(),
+                   tDigitizedStr.c_str());
+#if 0
             util::hexDump(p, 16);
 
             printf("TIFF:\n");
             const size_t count = end - p - 10;
             constexpr size_t pretty = 512;
             util::hexDump(p + 10, (count < pretty ? count : pretty));
+#endif
 #endif // LOG_PRINT_SEGMENTS
         }
 
@@ -122,6 +144,32 @@ jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
 
         if (info.type() == jpeg::SegmentType::SOS) { break; }
     }
+}
+
+
+
+jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
+{
+#if PRJ_DEBUG && 0
+    uint8_t buffer[300];
+#else
+    uint8_t buffer[64 * 1024];
+#endif
+
+    std::fstream ifs;
+
+    ifs.exceptions(std::ios::badbit | std::ios::failbit);
+    ifs.open(filePath, std::ios::in | std::ios::binary);
+
+    ifs.exceptions(std::ios::badbit);
+    ifs.read((char*)buffer, sizeof(buffer));
+
+    ifs.exceptions(std::ios::badbit | std::ios::failbit);
+    ifs.close();
+
+#if PRJ_DEBUG && LOG_PRINT_SEGMENTS
+    printf("\n\n%s\n", filePath.u8string().c_str());
+#endif
 
 
 
@@ -145,5 +193,5 @@ jpeg::Metadata jpeg::readMetadata(const fs::path& filePath)
 
 
 
-    return Metadata();
+    return Metadata(buffer, sizeof(buffer));
 }
