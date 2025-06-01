@@ -32,7 +32,7 @@ static int tiffToCTime(const char* str, time_t* t);
 
 
 
-#if 0
+#if defined(_DEBUG)
 std::string jpeg::Version::toString() const
 {
 #warning "is this JFIF version parsing ok?"
@@ -89,7 +89,7 @@ std::string jpeg::exif::Version::toString() const
 
 
 jpeg::SegmentInfo::SegmentInfo(const uint8_t* data, size_t count)
-    : m_type(SegmentType::none), m_size(0), m_app0Identifier()
+    : m_type(SegmentType::none), m_size(0), m_appXIdentifier()
 {
     if ((count >= 2) && (data[0] == JPEG_MARKER_PREFIX))
     {
@@ -98,24 +98,20 @@ jpeg::SegmentInfo::SegmentInfo(const uint8_t* data, size_t count)
         if (segmentMarker == JPEG_SOI_MARKER) { m_type = SegmentType::SOI; }
         else if (segmentMarker == JPEG_SOS_MARKER) { m_type = SegmentType::SOS; }
         else if (segmentMarker == JPEG_EOI_MARKER) { m_type = SegmentType::EOI; }
-
-        else if (segmentMarker == JPEG_JFIF_APP0_MARKER)
-        {
-            m_type = SegmentType::APP0;
-            if ((count >= 9) && (data[8] == 0)) { m_app0Identifier = std::string((const char*)(data + 4)); }
-        }
-
+        else if (segmentMarker == JPEG_JFIF_APP0_MARKER) { m_type = SegmentType::APP0; }
         else if (segmentMarker == JPEG_EXIF_APP1_MARKER) { m_type = SegmentType::APP1; }
         else if (segmentMarker == JPEG_EXIF_APP2_MARKER) { m_type = SegmentType::APP2; }
-
         else { m_type = SegmentType::unknown; }
 
         m_setSize(data, count);
+        m_setAppXIdentifier(data, count);
     }
 }
 
-bool jpeg::SegmentInfo::isApp0Segment() const { return ((m_type == SegmentType::APP0) && (m_app0Identifier == "JFIF")); }
-bool jpeg::SegmentInfo::isApp0ExtensionSegment() const { return ((m_type == SegmentType::APP0) && (m_app0Identifier == "JFXX")); }
+bool jpeg::SegmentInfo::isApp0Segment() const { return ((m_type == SegmentType::APP0) && (m_appXIdentifier == "JFIF")); }
+bool jpeg::SegmentInfo::isApp0ExtensionSegment() const { return ((m_type == SegmentType::APP0) && (m_appXIdentifier == "JFXX")); }
+bool jpeg::SegmentInfo::isApp1Segment() const { return ((m_type == SegmentType::APP1) && (m_appXIdentifier == "Exif")); }
+bool jpeg::SegmentInfo::isApp2Segment() const { return ((m_type == SegmentType::APP2) && (m_appXIdentifier == "FPXR")); }
 
 void jpeg::SegmentInfo::m_setSize(const uint8_t* data, size_t count)
 {
@@ -126,6 +122,12 @@ void jpeg::SegmentInfo::m_setSize(const uint8_t* data, size_t count)
     {
         if (count >= 4) { m_size = omw::bigEndian::decode_ui16(data + 2); }
     }
+}
+
+void jpeg::SegmentInfo::m_setAppXIdentifier(const uint8_t* data, size_t count)
+{
+    if ((count >= 9) && (data[8] == 0)) { m_appXIdentifier = std::string((const char*)(data + 4)); }
+    else { m_appXIdentifier = ""; }
 }
 
 

@@ -77,17 +77,17 @@ void jpeg::Metadata::m_parse(const uint8_t* data, size_t count)
 #if PRJ_DEBUG && LOG_PRINT_SEGMENTS
         if ((info.type() == SegmentType::APP1) && 0)
         {
-            if (p > buffer) { printf("\n"); }
+            if (p > data) { printf("\n"); }
 
             std::string segmentTypeStringPretty = toString(info.type());
             if (info.isApp0Segment()) { segmentTypeStringPretty += "-JFIF"; }
             if (info.isApp0ExtensionSegment()) { segmentTypeStringPretty += "-JFXX"; }
 
-            printf("@%04zx %s %zu 0x%04zx\n", (size_t)(p - buffer), segmentTypeStringPretty.c_str(), info.size(), info.size());
+            printf("@%04zx %s %zu 0x%04zx\n", (size_t)(p - data), segmentTypeStringPretty.c_str(), info.size(), info.size());
             if (info.size() > 0)
             {
                 const size_t s = ((info.size() == SIZE_MAX) ? 128 : (2 + info.size())); // segment size
-                const size_t d = sizeof(buffer) - (size_t)(p - buffer);                 // remaining data size
+                const size_t d = count - (size_t)(p - data);                            // remaining data size
                 const size_t pretty = ((info.type() == SegmentType::APP1) ? 1024 : 512);
 
                 size_t n = s;
@@ -112,7 +112,7 @@ void jpeg::Metadata::m_parse(const uint8_t* data, size_t count)
                    (segment.isValid() ? "valid" : "invalid"));
 #endif // LOG_PRINT_SEGMENTS
         }
-        else if (info.type() == SegmentType::APP1)
+        else if (info.isApp1Segment())
         {
             const jpeg::App1Segment segment(p, end - p);
 

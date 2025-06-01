@@ -103,11 +103,11 @@ class SegmentInfo
 {
 public:
     SegmentInfo()
-        : m_type(SegmentType::none), m_size(0), m_app0Identifier()
+        : m_type(SegmentType::none), m_size(0), m_appXIdentifier()
     {}
 
     SegmentInfo(const SegmentType& type, size_t size)
-        : m_type(type), m_size(size), m_app0Identifier()
+        : m_type(type), m_size(size), m_appXIdentifier()
     {}
 
     SegmentInfo(const uint8_t* data, size_t count);
@@ -128,13 +128,16 @@ public:
 
     bool isApp0Segment() const;
     bool isApp0ExtensionSegment() const;
+    bool isApp1Segment() const;
+    bool isApp2Segment() const;
 
 private:
     SegmentType m_type;
     size_t m_size;
-    std::string m_app0Identifier;
+    std::string m_appXIdentifier;
 
     void m_setSize(const uint8_t* data, size_t count);
+    void m_setAppXIdentifier(const uint8_t* data, size_t count);
 };
 
 
@@ -222,7 +225,7 @@ public:
     App1Segment(const uint8_t* data, size_t count)
         : Segment(data, count), m_tChanged(0), m_tDigitized(0), m_tOriginal(0)
     {
-        if (m_info.type() == SegmentType::APP1) { m_parse(data, count); }
+        if (m_info.isApp1Segment()) { m_parse(data, count); }
     }
 
     virtual ~App1Segment() {}
