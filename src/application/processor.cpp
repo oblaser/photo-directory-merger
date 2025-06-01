@@ -6,6 +6,7 @@ copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 
 #include <algorithm>
 #include <array>
+#include <cinttypes>
 #include <cmath>
 #include <filesystem>
 #include <functional>
@@ -479,20 +480,6 @@ scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
     return r;
 }
 
-constexpr char outFileDelimiter = '-';
-constexpr char outFileDelimiter_opt = '_';
-
-omw::stringVector_t iPhoneOutFileTokens(const fs::path& inFilePath)
-{
-    const omw::stringVector_t tokens =
-#if PRJ_DEBUG
-        { "YYYYMMDD", "hhmmss_" + std::to_string(rand()) };
-#endif
-#warning "TODO"
-
-    return tokens;
-}
-
 // YYYYMMDD-hhmmss-NAME[_...]
 std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& tokens, const std::string& inDirName)
 {
@@ -502,22 +489,22 @@ std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& token
     switch (scheme)
     {
     case SCHEME::huawai:
-        r = tokens[1] + outFileDelimiter + tokens[2] + outFileDelimiter + inDirName;
+        r = tokens[1] + app::outFileDelimiter + tokens[2] + app::outFileDelimiter + inDirName;
         nTokens = nTokensHuawai;
         break;
 
     case SCHEME::iPhone:
-        r = tokens[0] + outFileDelimiter + tokens[1] + outFileDelimiter + inDirName;
-        nTokens = SIZE_MAX;
+        r = tokens[0] + app::outFileDelimiter + inDirName;
+        nTokens = 1;
         break;
 
     case SCHEME::samsung:
-        r = tokens[0] + outFileDelimiter + tokens[1] + outFileDelimiter + inDirName;
+        r = tokens[0] + app::outFileDelimiter + tokens[1] + app::outFileDelimiter + inDirName;
         nTokens = nTokensSamsung;
         break;
 
     case SCHEME::winPhone:
-        r = tokens[1] + outFileDelimiter + tokens[2] + tokens[3] + tokens[4] + outFileDelimiter + inDirName + outFileDelimiter + tokens[0];
+        r = tokens[1] + app::outFileDelimiter + tokens[2] + tokens[3] + tokens[4] + app::outFileDelimiter + inDirName + app::outFileDelimiter + tokens[0];
         nTokens = nTokensWinPhone;
         break;
 
@@ -526,9 +513,53 @@ std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& token
         break;
     }
 
-    for (size_t i = nTokens; i < tokens.size(); ++i) { r += (outFileDelimiter_opt + tokens[i]); }
+    for (size_t i = nTokens; i < tokens.size(); ++i) { r += (app::outFileDelimiter_opt + tokens[i]); }
 
     return r;
+}
+
+fs::path outFilePath(const scheme_t& scheme, const omw::stringVector_t& tokens, const std::string& inDirName, const fs::path& inFile, const std::string& outDir)
+{
+    const auto outFileName = outFileStem(scheme, tokens, inDirName) + inFile.extension().u8string();
+    return outDir / fs::path(outFileName);
+}
+
+// { "YYYYMMDD-hhmmss", [ potential additional tokens ] }
+omw::stringVector_t iPhoneOutFileTokens(const jpeg::Metadata& metadata, const std::string& inDirName, const fs::path& inFile, const std::string& outDir)
+{
+    omw::stringVector_t tokens = {
+        metadata.tOriginal().toStringPhodime(),
+    };
+
+    static std::vector<fs::path> usedOutFilePaths;
+
+    fs::path outFile = outFilePath(SCHEME::iPhone, tokens, inDirName, inFile, outDir);
+    size_t n = 1;
+
+    while (omw::contains(usedOutFilePaths, outFile))
+    {
+        ++n;
+
+        if (tokens.size() < 2) { tokens.push_back(""); }
+        tokens[1] = std::to_string(n);
+
+        outFile = outFilePath(SCHEME::iPhone, tokens, inDirName, inFile, outDir);
+    }
+
+    usedOutFilePaths.push_back(outFile);
+
+    return tokens;
+}
+
+bool timestampsDifferMoreThan(const jpeg::Metadata& m, time_t maxDifference)
+{
+    const long long margin = maxDifference;
+
+    const long long a = std::llabs(m.tChanged().unixTime() - m.tDigitized().unixTime());
+    const long long b = std::llabs(m.tChanged().unixTime() - m.tOriginal().unixTime());
+    const long long c = std::llabs(m.tDigitized().unixTime() - m.tOriginal().unixTime());
+
+    return ((a > margin) || (b > margin) || (c > margin));
 }
 
 util::FileCounter process(const scheme_t& scheme, const std::string& inDir, const std::string& inDirName, const std::string& outDir, const app::Flags& flags,
@@ -547,8 +578,7 @@ util::FileCounter process(const scheme_t& scheme, const std::string& inDir, cons
             rFileCnt.addTotal();
 
             const fs::path inFile = (fs::path(entry.path())).make_preferred();
-            auto ___inFileStemTokens = omw::split(inFile.stem().u8string(), inFileDelimiter);
-            const auto& inFileStemTokens = ___inFileStemTokens;
+            auto inFileStemTokens = omw::split(inFile.stem().u8string(), inFileDelimiter);
 
             // Samsung multiple images in same second
             if ((inFileStemTokens.size() >= nTokensSamsung) && inFileStemTokens[1].contains('(') && (inFileStemTokens[1].back() == ')'))
@@ -559,27 +589,43 @@ util::FileCounter process(const scheme_t& scheme, const std::string& inDir, cons
 
                 if ((samsungTimeTokens.size() == 2) && omw::isUInteger(timeToken) && omw::isUInteger(nToken))
                 {
-                    ___inFileStemTokens[1] = timeToken;
-                    ___inFileStemTokens.insert(___inFileStemTokens.begin() + 2, nToken);
+                    inFileStemTokens[1] = timeToken;
+                    inFileStemTokens.insert(inFileStemTokens.begin() + 2, nToken);
                 }
             }
 
             if (scheme == detectScheme(inFileStemTokens))
             {
-                const auto tmp_outFileStem = outFileStem(scheme, ((scheme == SCHEME::iPhone) ? (iPhoneOutFileTokens(inFile)) : inFileStemTokens), inDirName);
-                const auto tmp_outFileExtension = inFile.extension().u8string();
+                bool perform = true;
 
-                const auto outFileName = tmp_outFileStem + tmp_outFileExtension;
+                if (scheme == SCHEME::iPhone)
+                {
+                    const auto metadata = jpeg::readMetadata(inFile);
+                    inFileStemTokens = iPhoneOutFileTokens(metadata, inDirName, inFile, outDir);
 
-                const fs::path outFile = outDir / fs::path(outFileName);
+                    constexpr time_t maxDiff = 10;
 
-                if (scheme == SCHEME::iPhone) { jpeg::readMetadata(inFile); }
+                    if (timestampsDifferMoreThan(metadata, maxDiff))
+                    {
+                        perform = false;
+                        ERROR_PRINT("###timestamps in file \"" + inFile.u8string() + "\" differ more than " + std::to_string(maxDiff) + "s");
+                        if (verbose)
+                        {
+                            printInfo();
+                            cout << "datetime original:  " << metadata.tOriginal().toStringIso8601() << endl;
+                            cout << std::string(ewiWidth, 0x20) << "datetime digitised: " << metadata.tDigitized().toStringIso8601() << endl;
+                            cout << std::string(ewiWidth, 0x20) << "datetime changed:   " << metadata.tChanged().toStringIso8601() << endl;
+                        }
+                    }
+                    else if (timestampsDifferMoreThan(metadata, 0)) { WARNING_PRINT("###timestamps in file \"" + inFile.u8string() + "\" differ"); }
+                }
+
+                const fs::path outFile = outFilePath(scheme, inFileStemTokens, inDirName, inFile, outDir);
 
 #if defined(PRJ_DEBUG) && 0
                 printFormattedLine("###\"" + inFile.u8string() + "\" -> \"" + outFile.u8string() + "\"");
 #endif
                 const bool outFileExists = fs::exists(outFile);
-                bool perform = true;
                 fs::copy_options opt = fs::copy_options::none;
 
                 if (outFileExists && flags.force)
@@ -620,7 +666,7 @@ util::FileCounter process(const scheme_t& scheme, const std::string& inDir, cons
 
                 if (verbose)
                 {
-                    std::string outFileName = inFile.stem().u8string() + outFileDelimiter + inDirName + inFile.extension().u8string();
+                    std::string outFileName = inFile.stem().u8string() + app::outFileDelimiter + inDirName + inFile.extension().u8string();
                     const fs::path outFile = (fs::path(outDir) / outFileName).make_preferred();
 
                     printInfo();
@@ -691,7 +737,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
         for (size_t i = 0; i < inDirs.size(); ++i) ___inDirPaths.at(i) = inDirs[i];
 
 
-#if defined(PRJ_DEBUG) && 1
+#if defined(PRJ_DEBUG) && 0
         dbg_rm_outDir(outDir);
 #endif
 
