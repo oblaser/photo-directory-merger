@@ -1,13 +1,15 @@
 /*
 author          Oliver Blaser
-date            04.11.2023
-copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
+date            06.04.2026
+copyright       GNU GPLv3 - Copyright (c) 2026 Oliver Blaser
 */
 
 #include <algorithm>
 #include <array>
 #include <cinttypes>
 #include <cmath>
+#include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <functional>
 #include <iomanip>
@@ -22,6 +24,7 @@ copyright       GNU GPLv3 - Copyright (c) 2023 Oliver Blaser
 #include "project.h"
 
 #include <omw/cli.h>
+#include <omw/defs.h>
 #include <omw/string.h>
 #include <omw/vector.h>
 
@@ -256,14 +259,16 @@ const std::string magentaDebugStr = "\033[95mDEBUG\033[39m";
 
 
 constexpr char inFileDelimiter = '_';
+constexpr char subTokenDelimiter_pixel = '.';
 
 typedef enum SCHEME
 {
     unknown = 0,
-    huawai,   // IMG_YYYYMMDD_hhmmss
-    iPhone,   // img-nnnn-uid / IMG_nnnn (old)
-    samsung,  // YYYYMMDD_hhmmss
-    winPhone, // WP_YYYYMMDD_hh_mm_ss_Pro
+    huawai,   // IMG_YYYYMMDD_hhmmss                local time
+    iPhone,   // img-nnnn-uid / IMG_nnnn (old)      (meta data)
+    pixel,    // PXL_YYYYMMDD_hhmmssfff[.MODE]      UTC
+    samsung,  // YYYYMMDD_hhmmss                    local time
+    winPhone, // WP_YYYYMMDD_hh_mm_ss_Pro           local time
 } scheme_t;
 
 omw::string toString(const scheme_t& scheme)
@@ -282,6 +287,10 @@ omw::string toString(const scheme_t& scheme)
 
     case SCHEME::iPhone:
         r = "iPhone";
+        break;
+
+    case SCHEME::pixel:
+        r = "Google Pixel";
         break;
 
     case SCHEME::samsung:
@@ -303,6 +312,7 @@ omw::string toString(const scheme_t& scheme)
 constexpr size_t nTokensHuawai = 3;
 constexpr size_t nTokensIPhone_old = 2;
 constexpr size_t nTokensIPhone = 3;
+constexpr size_t nTokensPixel = 3;
 constexpr size_t nTokensSamsung = 2;
 constexpr size_t nTokensWinPhone = 6;
 constexpr size_t nTokensMax = nTokensWinPhone;
@@ -341,6 +351,24 @@ bool schemeIsIPhone(const omw::stringVector_t& tokens)
     return r;
 }
 
+bool schemeIsPixel(const omw::stringVector_t& tokens)
+{
+    bool r = false;
+
+    if (tokens.size() >= nTokensPixel)
+    {
+        const auto tokens2_tokens = tokens[2].split(subTokenDelimiter_pixel, 2);
+
+        if ((tokens[0] == "PXL") && (tokens[1].length() == 8) && omw::isUInteger(tokens[1]) && (tokens2_tokens[0].length() == 9) &&
+            omw::isUInteger(tokens2_tokens[0]))
+        {
+            r = true;
+        }
+    }
+
+    return r;
+}
+
 bool schemeIsSamsung(const omw::stringVector_t& tokens)
 {
     bool r = false;
@@ -373,15 +401,17 @@ scheme_t detectScheme(const omw::stringVector_t& tokens)
 {
     scheme_t r = SCHEME::unknown;
 
-    constexpr uint32_t huawai = 0x00000010;
-    constexpr uint32_t iPhone = 0x00001000;
-    constexpr uint32_t samsung = 0x00100000;
-    constexpr uint32_t winPhone = 0x10000000;
+    constexpr uint32_t huawai = /*  */ 0x0001;
+    constexpr uint32_t iPhone = /*  */ 0x0002;
+    constexpr uint32_t pixel = /*   */ 0x0004;
+    constexpr uint32_t samsung = /* */ 0x0008;
+    constexpr uint32_t winPhone = /**/ 0x0010;
 
     uint32_t mask = 0;
 
     if (schemeIsHuawai(tokens)) { mask |= huawai; }
     if (schemeIsIPhone(tokens)) { mask |= iPhone; }
+    if (schemeIsPixel(tokens)) { mask |= pixel; }
     if (schemeIsSamsung(tokens)) { mask |= samsung; }
     if (schemeIsWinPhone(tokens)) { mask |= winPhone; }
 
@@ -389,6 +419,7 @@ scheme_t detectScheme(const omw::stringVector_t& tokens)
 
     if (mask == huawai) { r = SCHEME::huawai; }
     else if (mask == iPhone) { r = SCHEME::iPhone; }
+    else if (mask == pixel) { r = SCHEME::pixel; }
     else if (mask == samsung) { r = SCHEME::samsung; }
     else if (mask == winPhone) { r = SCHEME::winPhone; }
     // else nop
@@ -432,6 +463,7 @@ scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
 
         size_t cnt_huawai = 0;
         size_t cnt_iPhone = 0;
+        size_t cnt_pixel = 0;
         size_t cnt_samsung = 0;
         size_t cnt_winPhone = 0;
 
@@ -440,11 +472,12 @@ scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
             const auto tokens = analyze[i].split(inFileDelimiter, nTokensMax + 1);
             if (schemeIsHuawai(tokens)) { ++cnt_huawai; }
             if (schemeIsIPhone(tokens)) { ++cnt_iPhone; }
+            if (schemeIsPixel(tokens)) { ++cnt_pixel; }
             if (schemeIsSamsung(tokens)) { ++cnt_samsung; }
             if (schemeIsWinPhone(tokens)) { ++cnt_winPhone; }
         }
 
-        std::array<size_t, 4> cnt = { cnt_huawai, cnt_iPhone, cnt_samsung, cnt_winPhone };
+        std::array<size_t, 5> cnt = { cnt_huawai, cnt_iPhone, cnt_pixel, cnt_samsung, cnt_winPhone };
         std::sort(cnt.begin(), cnt.end(), std::greater<size_t>());
 
         const double rate = (double)(cnt[0]) / (double)(analyze.size());
@@ -454,6 +487,7 @@ scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
         {
             if (cnt[0] == cnt_huawai) { r = SCHEME::huawai; }
             else if (cnt[0] == cnt_iPhone) { r = SCHEME::iPhone; }
+            else if (cnt[0] == cnt_pixel) { r = SCHEME::pixel; }
             else if (cnt[0] == cnt_samsung) { r = SCHEME::samsung; }
             else if (cnt[0] == cnt_winPhone) { r = SCHEME::winPhone; }
             // else if (cnt[0] == cnt_) r = SCHEME::;
@@ -480,9 +514,11 @@ scheme_t detectScheme(const fs::path& inDir, double* pRate = nullptr)
     return r;
 }
 
-// YYYYMMDD-hhmmss-NAME[_...]
-std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& tokens, const std::string& inDirName)
+// YYYYMMDD-hhmmss[-fff]-NAME[_...]
+std::string outFileStem(const scheme_t& scheme, omw::stringVector_t tokens, const std::string& inDirName, const app::Flags& flags, util::ResultCounter& rcnt)
 {
+    IMPLEMENT_FLAGS();
+
     std::string r;
     size_t nTokens;
 
@@ -497,6 +533,77 @@ std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& token
         r = tokens[0] + app::outFileDelimiter + inDirName;
         nTokens = 1;
         break;
+
+    case SCHEME::pixel:
+    {
+        const auto originalInFileStem = omw::join(tokens, inFileDelimiter);
+
+        static_assert(nTokensPixel == 3, "changes needed here?");
+        constexpr size_t nBaseTokens = 3;
+
+        tokens = omw::join(tokens, inFileDelimiter).split(inFileDelimiter, nBaseTokens);
+        const auto additionalTokens = tokens[nBaseTokens - 1].split(subTokenDelimiter_pixel);
+        tokens.pop_back();
+        for (size_t i = 0; i < additionalTokens.size(); ++i) { tokens.push_back(additionalTokens[i]); }
+
+        struct tm bdt = {
+            .tm_sec = std::stoi(tokens[2].substr(4, 2)),
+            .tm_min = std::stoi(tokens[2].substr(2, 2)),
+            .tm_hour = std::stoi(tokens[2].substr(0, 2)),
+            .tm_mday = std::stoi(tokens[1].substr(6, 2)),
+            .tm_mon = std::stoi(tokens[1].substr(4, 2)) - 1,
+            .tm_year = std::stoi(tokens[1].substr(0, 4)) - 1900,
+            .tm_wday = -1,
+            .tm_yday = -1,
+            .tm_isdst = -1,
+#if OMW_PLAT_POSIX
+            .tm_gmtoff = 0,
+            .tm_zone = "UTC",
+#endif
+        };
+
+        const std::string millisStr = tokens[2].substr(6);
+
+#if OMW_PLAT_WIN
+        static_assert(sizeof(time_t) == 8);
+        const time_t timestamp = _mkgmtime64(&bdt);
+        if (timestamp < 0)
+        {
+            // TODO maybe check `GetLastError()` (not specifiied)?
+            throw -(__LINE__);
+        }
+#else
+        const time_t timestamp = timegm(&bdt);
+        if (timestamp < 0)
+        {
+            ERROR_PRINT("can't convert \"" + originalInFileStem + "\" to timestamp (" + std::to_string(errno) + " " + std::string(strerror(errno)) + ")");
+            throw -(__LINE__);
+        }
+#endif
+
+        static bool pixelWarningPrinted = false;
+        if (!pixelWarningPrinted)
+        {
+            pixelWarningPrinted = true;
+            WARNING_PRINT("if the timezone the picture was taken in and the one this program is running "
+                          "in is not the same, the resulting filename (timestamp) will be wrong");
+        }
+
+        struct tm local;
+        {
+            const struct tm* tmp = localtime(&timestamp);
+            if (tmp) { local = *tmp; }
+            else { throw -(__LINE__); }
+        }
+
+        char buffer[100];
+        if (std::strftime(buffer, sizeof(buffer), "%Y%m%d-%H%M%S", &local) <= 0) { throw -(__LINE__); }
+
+        r = buffer + std::string(1, app::outFileDelimiter) + millisStr + app::outFileDelimiter + inDirName;
+
+        nTokens = nBaseTokens;
+    }
+    break;
 
     case SCHEME::samsung:
         r = tokens[0] + app::outFileDelimiter + tokens[1] + app::outFileDelimiter + inDirName;
@@ -518,14 +625,16 @@ std::string outFileStem(const scheme_t& scheme, const omw::stringVector_t& token
     return r;
 }
 
-fs::path outFilePath(const scheme_t& scheme, const omw::stringVector_t& tokens, const std::string& inDirName, const fs::path& inFile, const std::string& outDir)
+fs::path outFilePath(const scheme_t& scheme, const omw::stringVector_t& tokens, const std::string& inDirName, const fs::path& inFile, const std::string& outDir,
+                     const app::Flags& flags, util::ResultCounter& rcnt)
 {
-    const auto outFileName = outFileStem(scheme, tokens, inDirName) + inFile.extension().u8string();
+    const auto outFileName = outFileStem(scheme, tokens, inDirName, flags, rcnt) + inFile.extension().u8string();
     return outDir / fs::path(outFileName);
 }
 
 // { "YYYYMMDD-hhmmss", [ potential additional tokens ] }
-omw::stringVector_t iPhoneOutFileTokens(const jpeg::Metadata& metadata, const std::string& inDirName, const fs::path& inFile, const std::string& outDir)
+omw::stringVector_t iPhoneOutFileTokens(const jpeg::Metadata& metadata, const std::string& inDirName, const fs::path& inFile, const std::string& outDir,
+                                        const app::Flags& flags, util::ResultCounter& rcnt)
 {
     omw::stringVector_t tokens = {
         metadata.tOriginal().toStringPhodime(),
@@ -533,7 +642,7 @@ omw::stringVector_t iPhoneOutFileTokens(const jpeg::Metadata& metadata, const st
 
     static std::vector<fs::path> usedOutFilePaths;
 
-    fs::path outFile = outFilePath(SCHEME::iPhone, tokens, inDirName, inFile, outDir);
+    fs::path outFile = outFilePath(SCHEME::iPhone, tokens, inDirName, inFile, outDir, flags, rcnt);
     size_t n = 1;
 
     while (omw::contains(usedOutFilePaths, outFile))
@@ -543,7 +652,7 @@ omw::stringVector_t iPhoneOutFileTokens(const jpeg::Metadata& metadata, const st
         if (tokens.size() < 2) { tokens.push_back(""); }
         tokens[1] = std::to_string(n);
 
-        outFile = outFilePath(SCHEME::iPhone, tokens, inDirName, inFile, outDir);
+        outFile = outFilePath(SCHEME::iPhone, tokens, inDirName, inFile, outDir, flags, rcnt);
     }
 
     usedOutFilePaths.push_back(outFile);
@@ -569,7 +678,7 @@ util::FileCounter process(const scheme_t& scheme, const std::string& inDir, cons
 
     util::FileCounter rFileCnt;
 
-    if (scheme == SCHEME::unknown) throw (int)(__LINE__);
+    if (scheme == SCHEME::unknown) { throw (int)(__LINE__); }
 
     for (const fs::directory_entry& entry : fs::directory_iterator(inDir))
     {
@@ -601,7 +710,7 @@ util::FileCounter process(const scheme_t& scheme, const std::string& inDir, cons
                 if (scheme == SCHEME::iPhone)
                 {
                     const auto metadata = jpeg::readMetadata(inFile);
-                    inFileStemTokens = iPhoneOutFileTokens(metadata, inDirName, inFile, outDir);
+                    inFileStemTokens = iPhoneOutFileTokens(metadata, inDirName, inFile, outDir, flags, rcnt);
 
                     constexpr time_t maxDiff = 10;
 
@@ -620,7 +729,7 @@ util::FileCounter process(const scheme_t& scheme, const std::string& inDir, cons
                     else if (timestampsDifferMoreThan(metadata, 0)) { WARNING_PRINT("###timestamps in file \"" + inFile.u8string() + "\" differ"); }
                 }
 
-                const fs::path outFile = outFilePath(scheme, inFileStemTokens, inDirName, inFile, outDir);
+                const fs::path outFile = outFilePath(scheme, inFileStemTokens, inDirName, inFile, outDir, flags, rcnt);
 
 #if defined(PRJ_DEBUG) && 0
                 printFormattedLine("###\"" + inFile.u8string() + "\" -> \"" + outFile.u8string() + "\"");
@@ -737,7 +846,7 @@ int app::process(const std::vector<std::string>& inDirs, const std::string& outD
         for (size_t i = 0; i < inDirs.size(); ++i) ___inDirPaths.at(i) = inDirs[i];
 
 
-#if defined(PRJ_DEBUG) && 0
+#if defined(PRJ_DEBUG) && 01
         dbg_rm_outDir(outDir);
 #endif
 
